@@ -23,10 +23,13 @@ def log_to_database(track_id, event_type):
     """Fungsi untuk mengirim data kejadian ke MySQL"""
     try:
         sql = "INSERT INTO visitor_logs (track_id, event_type, created_at) VALUES (%s, %s, %s)"
-        val = (track_id, event_type, datetime.now())
+        
+        # PERUBAHAN DI SINI: Kita bungkus track_id dengan int()
+        val = (int(track_id), event_type, datetime.now()) 
+        
         cursor.execute(sql, val)
         db.commit()
-        print(f"📡 Data Terkirim -> ID: {track_id} | Kejadian: {event_type}")
+        print(f"📡 Data Terkirim -> ID: {int(track_id)} | Kejadian: {event_type}")
     except Exception as e:
         print(f"Gagal mengirim data: {e}")
 

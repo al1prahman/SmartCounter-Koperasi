@@ -5,7 +5,7 @@ import time
 import mysql.connector
 from datetime import datetime
 
-# --- SETUP KONEKSI DATABASE (STEP 10) ---
+# --- SETUP KONEKSI DATABASE ---
 try:
     db = mysql.connector.connect(
         host="localhost",
@@ -23,12 +23,22 @@ def log_to_database(track_id, event_type):
     """Fungsi untuk mengirim data kejadian ke MySQL"""
     try:
         sql = "INSERT INTO visitor_logs (track_id, event_type, created_at) VALUES (%s, %s, %s)"
-        val = (track_id, event_type, datetime.now())
+        val = (int(track_id), event_type, datetime.now())
         cursor.execute(sql, val)
         db.commit()
-        print(f"📡 Data Terkirim -> ID: {track_id} | Kejadian: {event_type}")
+        print(f"📡 Data Terkirim -> ID: {int(track_id)} | Kejadian: {event_type}")
     except Exception as e:
         print(f"Gagal mengirim data: {e}")
+
+def remove_false_visitor(track_id):
+    """Fungsi untuk menghapus data pengunjung jika ternyata dia adalah Staf"""
+    try:
+        sql = "DELETE FROM visitor_logs WHERE track_id = %s AND event_type IN ('Masuk', 'Keluar')"
+        cursor.execute(sql, (int(track_id),))
+        db.commit()
+        print(f"🧹 KOREKSI: Riwayat pengunjung ID {int(track_id)} dihapus karena dia adalah STAF!")
+    except Exception as e:
+        print(f"Gagal menghapus data: {e}")
 
 # --- SETUP AI ---
 model = YOLO('yolov8n.pt')
@@ -91,7 +101,7 @@ while True:
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
             cv2.putText(frame, f"ID:{track_id} {role_text}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
 
-            # --- LOGIKA STAFF FILTERING ---
+            # --- LOGIKA STAFF FILTERING & AUTO-DELETE ---
             in_staff_zone = cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0
             if in_staff_zone and not is_staff:
                 if track_id not in staff_zone_timers:
@@ -99,8 +109,16 @@ while True:
                 else:
                     elapsed = time.time() - staff_zone_timers[track_id]
                     cv2.putText(frame, f"{int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    
                     if elapsed >= STAFF_TIME_LIMIT:
-                        staff_ids.add(track_id) 
+                        staff_ids.add(track_id)
+                        remove_false_visitor(track_id)          # 1. Hapus riwayat masuknya di DB
+                        log_to_database(track_id, "Staf Aktif") # 2. Catat dia sebagai Staf
+                        
+                        # Kurangi angka di layar agar tampilan UI tidak membingungkan
+                        if track_id in track_states and track_states[track_id] == 'kanan':
+                            count_in = max(0, count_in - 1) 
+
             elif not in_staff_zone:
                 if track_id in staff_zone_timers:
                     del staff_zone_timers[track_id]
@@ -119,7 +137,7 @@ while True:
                     if elapsed >= BUYER_TIME_LIMIT:
                         buyer_ids.add(track_id)
                         count_buyer += 1
-                        log_to_database(track_id, "Pembeli Baru") # <-- STEP 10: SIMPAN KE DATABASE
+                        log_to_database(track_id, "Pembeli Baru") 
             elif not in_cashier_zone:
                 if track_id in cashier_zone_timers:
                     del cashier_zone_timers[track_id]
@@ -132,11 +150,11 @@ while True:
                 if current_state == 'kiri' and cx > (LINE_X + OFFSET):
                     count_in += 1
                     track_states[track_id] = 'kanan'
-                    log_to_database(track_id, "Masuk") # <-- STEP 10: SIMPAN KE DATABASE
+                    log_to_database(track_id, "Masuk") 
                 elif current_state == 'kanan' and cx < (LINE_X - OFFSET):
                     count_out += 1
                     track_states[track_id] = 'kiri'
-                    log_to_database(track_id, "Keluar") # <-- STEP 10: SIMPAN KE DATABASE
+                    log_to_database(track_id, "Keluar") 
 
     cv2.putText(frame, f"Masuk: {count_in}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
     cv2.putText(frame, f"Keluar: {count_out}", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)

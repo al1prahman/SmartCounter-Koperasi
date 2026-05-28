@@ -128,7 +128,8 @@ if run_camera:
         cv2.polylines(frame, [STAFF_ZONE], True, (255, 0, 0), 2)
         cv2.polylines(frame, [CASHIER_ZONE], True, (0, 165, 255), 2)
 
-        results = model.track(frame, persist=True, classes=[0], verbose=False)
+        # AI Tracking dengan Threshold 0.5 untuk meringankan kinerja
+        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.5)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -183,7 +184,9 @@ if run_camera:
         rate = round((st.session_state.count_buyer / st.session_state.count_in * 100), 1) if st.session_state.count_in > 0 else 0
         val_rate.metric("Conversion Rate", f"{rate}%")
 
-        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        # --- OPTIMASI FPS: Kompresi resolusi khusus untuk UI Web ---
+        frame_ui = cv2.resize(frame, (640, 360))
+        FRAME_WINDOW.image(cv2.cvtColor(frame_ui, cv2.COLOR_BGR2RGB), use_container_width=True)
     cap.release()
 
 # --- AREA GRAFIK (DI BAWAH VIDEO) ---

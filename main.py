@@ -1,169 +1,209 @@
+import streamlit as st
 from ultralytics import YOLO
 import cv2
 import numpy as np
 import time
 import mysql.connector
+import pandas as pd
 from datetime import datetime
 
-# --- SETUP KONEKSI DATABASE ---
-try:
-    db = mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="",      # Kosongkan jika password XAMPP Anda default
-        database="koperasi_db"
-    )
-    cursor = db.cursor()
-    print("✅ BERHASIL: Terhubung ke Database koperasi_db!")
-except Exception as e:
-    print(f"❌ ERROR: Gagal terhubung ke Database. Pastikan XAMPP menyala. Detail: {e}")
-    exit()
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="Smart Counter Dashboard", layout="wide")
+st.title("📊 Dashboard Cerdas Koperasi Merah Putih")
+st.markdown("Sistem Monitoring Real-time & Analitik Konversi Pembeli")
 
-def log_to_database(track_id, event_type):
-    """Fungsi untuk mengirim data kejadian ke MySQL"""
+# --- KONEKSI DATABASE ---
+@st.cache_resource
+def init_connection():
     try:
-        sql = "INSERT INTO visitor_logs (track_id, event_type, created_at) VALUES (%s, %s, %s)"
-        val = (int(track_id), event_type, datetime.now())
-        cursor.execute(sql, val)
-        db.commit()
-        print(f"📡 Data Terkirim -> ID: {int(track_id)} | Kejadian: {event_type}")
-    except Exception as e:
-        print(f"Gagal mengirim data: {e}")
+        return mysql.connector.connect(
+            host="localhost", user="root", password="", database="koperasi_db"
+        )
+    except Exception:
+        return None
+
+db = init_connection()
+cursor = db.cursor() if db else None
+
+# --- FUNGSI AMBIL DATA HISTORIS (Agar tidak reset ke 0) ---
+def fetch_today_stats():
+    if not cursor: return 0, 0, 0
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # Hitung Masuk
+    cursor.execute("SELECT COUNT(*) FROM visitor_logs WHERE event_type = 'Masuk' AND DATE(created_at) = %s", (today,))
+    tin = cursor.fetchone()[0]
+    # Hitung Keluar
+    cursor.execute("SELECT COUNT(*) FROM visitor_logs WHERE event_type = 'Keluar' AND DATE(created_at) = %s", (today,))
+    tout = cursor.fetchone()[0]
+    # Hitung Pembeli
+    cursor.execute("SELECT COUNT(*) FROM visitor_logs WHERE event_type = 'Pembeli Baru' AND DATE(created_at) = %s", (today,))
+    tbuy = cursor.fetchone()[0]
+    
+    return tin, tout, tbuy
+
+def get_chart_data():
+    if not cursor: return pd.DataFrame(), pd.DataFrame()
+    
+    # 1. Data Traffic Per Jam (Hari Ini)
+    today = datetime.now().strftime('%Y-%m-%d')
+    query_hour = f"SELECT HOUR(created_at) as jam, COUNT(*) as total FROM visitor_logs WHERE event_type = 'Masuk' AND DATE(created_at) = '{today}' GROUP BY jam"
+    df_hour = pd.read_sql(query_hour, db)
+    
+    # 2. Data 7 Hari Terakhir (Pengunjung vs Pembeli)
+    query_days = """
+        SELECT DATE(created_at) as tanggal, 
+        SUM(CASE WHEN event_type = 'Masuk' THEN 1 ELSE 0 END) as Pengunjung,
+        SUM(CASE WHEN event_type = 'Pembeli Baru' THEN 1 ELSE 0 END) as Pembeli
+        FROM visitor_logs 
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY tanggal ORDER BY tanggal ASC
+    """
+    df_days = pd.read_sql(query_days, db)
+    return df_hour, df_days
+
+# --- LOGIKA DATABASE ---
+def log_to_database(track_id, event_type):
+    if cursor:
+        try:
+            cursor.execute("INSERT INTO visitor_logs (track_id, event_type, created_at) VALUES (%s, %s, %s)", 
+                           (int(track_id), event_type, datetime.now()))
+            db.commit()
+        except: pass
 
 def remove_false_visitor(track_id):
-    """Fungsi untuk menghapus data pengunjung jika ternyata dia adalah Staf"""
-    try:
-        sql = "DELETE FROM visitor_logs WHERE track_id = %s AND event_type IN ('Masuk', 'Keluar')"
-        cursor.execute(sql, (int(track_id),))
-        db.commit()
-        print(f"🧹 KOREKSI: Riwayat pengunjung ID {int(track_id)} dihapus karena dia adalah STAF!")
-    except Exception as e:
-        print(f"Gagal menghapus data: {e}")
+    if cursor:
+        try:
+            cursor.execute("DELETE FROM visitor_logs WHERE track_id = %s AND event_type IN ('Masuk', 'Keluar')", (int(track_id),))
+            db.commit()
+        except: pass
 
-# --- SETUP AI ---
-model = YOLO('yolov8n.pt')
-cap = cv2.VideoCapture(0)
+# --- INISIALISASI SESSION STATE ---
+if 'initialized' not in st.session_state:
+    tin, tout, tbuy = fetch_today_stats()
+    st.session_state.update({
+        'initialized': True,
+        'count_in': tin, 'count_out': tout, 'count_buyer': tbuy,
+        'track_states': {}, 'staff_zone_timers': {}, 'cashier_zone_timers': {},
+        'staff_ids': set(), 'buyer_ids': set()
+    })
 
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+# --- UI: METRIK UTAMA ---
+c1, c2, c3 = st.columns(3)
+val_in = c1.empty()
+val_buy = c2.empty()
+val_rate = c3.empty()
 
-# --- KONFIGURASI GARIS PINTU & ZONA GEOFENCING ---
-LINE_X = 640  
-OFFSET = 40  
-count_in = 0
-count_out = 0
-track_states = {}
+# --- SIDEBAR & MODEL ---
+st.sidebar.header("Kontrol Sistem")
+run_camera = st.sidebar.checkbox("▶️ Aktifkan Kamera AI", value=False)
+show_charts = st.sidebar.checkbox("📈 Tampilkan Grafik Analitik", value=True)
 
+@st.cache_resource
+def load_model():
+    return YOLO('yolov8n.pt')
+model = load_model()
+
+# --- AREA VIDEO ---
+st.write("### 🎥 Live Camera Stream")
+_, col_vid, _ = st.columns([1, 4, 1])
+FRAME_WINDOW = col_vid.empty()
+
+# Konfigurasi Zona Asal (Hardcode sementara sebelum dibuat dinamis)
+LINE_X = 640
 STAFF_ZONE = np.array([[100, 100], [400, 100], [400, 400], [100, 400]], np.int32)
 CASHIER_ZONE = np.array([[800, 200], [1200, 200], [1200, 600], [800, 600]], np.int32)
 
-STAFF_TIME_LIMIT = 30  
-BUYER_TIME_LIMIT = 20  
-
-staff_zone_timers = {}   
-cashier_zone_timers = {} 
-
-staff_ids = set() 
-buyer_ids = set() 
-count_buyer = 0
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-
-    # 1. Gambar Visual Area dan Garis
-    cv2.line(frame, (LINE_X, 0), (LINE_X, frame.shape[0]), (0, 255, 255), 2)
-    cv2.polylines(frame, [STAFF_ZONE], isClosed=True, color=(255, 0, 0), thickness=2)
-    cv2.putText(frame, "ZONA STAF", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-    cv2.polylines(frame, [CASHIER_ZONE], isClosed=True, color=(0, 165, 255), thickness=2)
-    cv2.putText(frame, "ZONA KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
-
-    # 2. Lacak Objek AI
-    results = model.track(frame, persist=True, classes=[0], verbose=False, imgsz=320)
+# --- LOOP KAMERA ---
+if run_camera:
+    cap = cv2.VideoCapture(0)
+    cap.set(3, 1280); cap.set(4, 720) # Resolusi HD 16:9
     
-    if results[0].boxes is not None and results[0].boxes.id is not None:
-        boxes = results[0].boxes.xyxy.cpu().numpy()  
-        track_ids = results[0].boxes.id.int().cpu().numpy()  
+    while run_camera:
+        ret, frame = cap.read()
+        if not ret: break
+        
+        # Visualisasi Zona
+        cv2.line(frame, (LINE_X, 0), (LINE_X, 720), (0, 255, 255), 2)
+        cv2.polylines(frame, [STAFF_ZONE], True, (255, 0, 0), 2)
+        cv2.polylines(frame, [CASHIER_ZONE], True, (0, 165, 255), 2)
 
-        for box, track_id in zip(boxes, track_ids):
-            x1, y1, x2, y2 = map(int, box)
-            cx = int((x1 + x2) / 2)
-            cy = int((y1 + y2) / 2)
-            
-            is_staff = track_id in staff_ids
-            is_buyer = track_id in buyer_ids
+        # AI Tracking dengan Threshold 0.5 untuk meringankan kinerja
+        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.5)
+        
+        if results[0].boxes is not None and results[0].boxes.id is not None:
+            boxes = results[0].boxes.xyxy.cpu().numpy()
+            ids = results[0].boxes.id.int().cpu().numpy()
 
-            box_color = (255, 0, 0) if is_staff else ((0, 165, 255) if is_buyer else (0, 255, 0))
-            role_text = "STAFF" if is_staff else ("PEMBELI" if is_buyer else "PENGUNJUNG")
+            for box, track_id in zip(boxes, ids):
+                x1, y1, x2, y2 = map(int, box)
+                cx, cy = (x1+x2)//2, (y1+y2)//2
+                
+                is_staff = track_id in st.session_state.staff_ids
+                is_buyer = track_id in st.session_state.buyer_ids
+                
+                # --- LOGIKA STAF (30 Detik) ---
+                if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff:
+                    if track_id not in st.session_state.staff_zone_timers:
+                        st.session_state.staff_zone_timers[track_id] = time.time()
+                    elif time.time() - st.session_state.staff_zone_timers[track_id] >= 30:
+                        st.session_state.staff_ids.add(track_id)
+                        remove_false_visitor(track_id)
+                        log_to_database(track_id, "Staf Aktif")
+                        st.session_state.count_in = max(0, st.session_state.count_in - 1)
 
-            cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-            cv2.putText(frame, f"ID:{track_id} {role_text}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
+                # --- LOGIKA PEMBELI (20 Detik) ---
+                if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
+                    if track_id not in st.session_state.cashier_zone_timers:
+                        st.session_state.cashier_zone_timers[track_id] = time.time()
+                    elif time.time() - st.session_state.cashier_zone_timers[track_id] >= 20:
+                        st.session_state.buyer_ids.add(track_id)
+                        st.session_state.count_buyer += 1
+                        log_to_database(track_id, "Pembeli Baru")
 
-            # --- LOGIKA STAFF FILTERING & AUTO-DELETE ---
-            in_staff_zone = cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0
-            if in_staff_zone and not is_staff:
-                if track_id not in staff_zone_timers:
-                    staff_zone_timers[track_id] = time.time()
+                # --- LOGIKA MASUK/KELUAR GARIS PINTU ---
+                if track_id not in st.session_state.track_states:
+                    st.session_state.track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
                 else:
-                    elapsed = time.time() - staff_zone_timers[track_id]
-                    cv2.putText(frame, f"{int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-                    
-                    if elapsed >= STAFF_TIME_LIMIT:
-                        staff_ids.add(track_id)
-                        remove_false_visitor(track_id)          # 1. Hapus riwayat masuknya di DB
-                        log_to_database(track_id, "Staf Aktif") # 2. Catat dia sebagai Staf
-                        
-                        # Kurangi angka di layar agar tampilan UI tidak membingungkan
-                        if track_id in track_states and track_states[track_id] == 'kanan':
-                            count_in = max(0, count_in - 1) 
+                    if st.session_state.track_states[track_id] == 'kiri' and cx > LINE_X + 40:
+                        st.session_state.count_in += 1
+                        st.session_state.track_states[track_id] = 'kanan'
+                        log_to_database(track_id, "Masuk")
+                    elif st.session_state.track_states[track_id] == 'kanan' and cx < LINE_X - 40:
+                        st.session_state.count_out += 1
+                        st.session_state.track_states[track_id] = 'kiri'
+                        log_to_database(track_id, "Keluar")
 
-            elif not in_staff_zone:
-                if track_id in staff_zone_timers:
-                    del staff_zone_timers[track_id]
+                # Warna Bounding Box
+                color = (0, 165, 255) if is_buyer else ((255, 0, 0) if is_staff else (0, 255, 0))
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-            if is_staff:
-                continue
+        # Update Metrics Real-time
+        val_in.metric("Total Masuk (Hari Ini)", st.session_state.count_in)
+        val_buy.metric("Total Pembeli (Hari Ini)", st.session_state.count_buyer)
+        rate = round((st.session_state.count_buyer / st.session_state.count_in * 100), 1) if st.session_state.count_in > 0 else 0
+        val_rate.metric("Conversion Rate", f"{rate}%")
 
-            # --- LOGIKA ESTIMASI PEMBELI ---
-            in_cashier_zone = cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0
-            if in_cashier_zone and not is_buyer:
-                if track_id not in cashier_zone_timers:
-                    cashier_zone_timers[track_id] = time.time()
-                else:
-                    elapsed = time.time() - cashier_zone_timers[track_id]
-                    cv2.putText(frame, f"Antre: {int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 2)
-                    if elapsed >= BUYER_TIME_LIMIT:
-                        buyer_ids.add(track_id)
-                        count_buyer += 1
-                        log_to_database(track_id, "Pembeli Baru") 
-            elif not in_cashier_zone:
-                if track_id in cashier_zone_timers:
-                    del cashier_zone_timers[track_id]
+        # --- OPTIMASI FPS: Kompresi resolusi khusus untuk UI Web ---
+        frame_ui = cv2.resize(frame, (640, 360))
+        FRAME_WINDOW.image(cv2.cvtColor(frame_ui, cv2.COLOR_BGR2RGB), use_container_width=True)
+    cap.release()
 
-            # --- LOGIKA GARIS PINTU ---
-            if track_id not in track_states:
-                track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
-            else:
-                current_state = track_states[track_id]
-                if current_state == 'kiri' and cx > (LINE_X + OFFSET):
-                    count_in += 1
-                    track_states[track_id] = 'kanan'
-                    log_to_database(track_id, "Masuk") 
-                elif current_state == 'kanan' and cx < (LINE_X - OFFSET):
-                    count_out += 1
-                    track_states[track_id] = 'kiri'
-                    log_to_database(track_id, "Keluar") 
-
-    cv2.putText(frame, f"Masuk: {count_in}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
-    cv2.putText(frame, f"Keluar: {count_out}", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-    cv2.putText(frame, f"Total Pembeli: {count_buyer}", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 3)
-
-    cv2.imshow("Smart Counter", frame)
-    if cv2.waitKey(1) == ord('q'):
-        break
-
-cap.release()
-db.close()
-cv2.destroyAllWindows()
+# --- AREA GRAFIK (DI BAWAH VIDEO) ---
+if show_charts:
+    st.write("---")
+    st.write("### 📈 Analitik Kunjungan")
+    df_h, df_d = get_chart_data()
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.write("**Trafik Pengunjung per Jam (Hari Ini)**")
+        if not df_h.empty:
+            st.line_chart(df_h.set_index('jam'))
+        else: st.info("Belum ada data jam ini.")
+        
+    with col_b:
+        st.write("**Pengunjung vs Pembeli (7 Hari Terakhir)**")
+        if not df_d.empty:
+            st.bar_chart(df_d.set_index('tanggal'))
+        else: st.info("Data historis tidak ditemukan.")

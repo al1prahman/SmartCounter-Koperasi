@@ -109,7 +109,7 @@ st.write("### 🎥 Live Camera Stream")
 _, col_vid, _ = st.columns([1, 4, 1])
 FRAME_WINDOW = col_vid.empty()
 
-# Konfigurasi Zona
+# Konfigurasi Zona Asal (Hardcode sementara sebelum dibuat dinamis)
 LINE_X = 640
 STAFF_ZONE = np.array([[100, 100], [400, 100], [400, 400], [100, 400]], np.int32)
 CASHIER_ZONE = np.array([[800, 200], [1200, 200], [1200, 600], [800, 600]], np.int32)
@@ -117,7 +117,7 @@ CASHIER_ZONE = np.array([[800, 200], [1200, 200], [1200, 600], [800, 600]], np.i
 # --- LOOP KAMERA ---
 if run_camera:
     cap = cv2.VideoCapture(0)
-    cap.set(3, 1280); cap.set(4, 720)
+    cap.set(3, 1280); cap.set(4, 720) # Resolusi HD 16:9
     
     while run_camera:
         ret, frame = cap.read()
@@ -141,9 +141,7 @@ if run_camera:
                 is_staff = track_id in st.session_state.staff_ids
                 is_buyer = track_id in st.session_state.buyer_ids
                 
-                # Logic Garis & Zona (Dwell Time)
-                # (Sama seperti kode sebelumnya, hanya pastikan update st.session_state)
-                # --- LOGIKA STAF ---
+                # --- LOGIKA STAF (30 Detik) ---
                 if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff:
                     if track_id not in st.session_state.staff_zone_timers:
                         st.session_state.staff_zone_timers[track_id] = time.time()
@@ -153,7 +151,7 @@ if run_camera:
                         log_to_database(track_id, "Staf Aktif")
                         st.session_state.count_in = max(0, st.session_state.count_in - 1)
 
-                # --- LOGIKA PEMBELI ---
+                # --- LOGIKA PEMBELI (20 Detik) ---
                 if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
                     if track_id not in st.session_state.cashier_zone_timers:
                         st.session_state.cashier_zone_timers[track_id] = time.time()
@@ -162,7 +160,7 @@ if run_camera:
                         st.session_state.count_buyer += 1
                         log_to_database(track_id, "Pembeli Baru")
 
-                # --- LOGIKA MASUK/KELUAR ---
+                # --- LOGIKA MASUK/KELUAR GARIS PINTU ---
                 if track_id not in st.session_state.track_states:
                     st.session_state.track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
                 else:
@@ -175,8 +173,8 @@ if run_camera:
                         st.session_state.track_states[track_id] = 'kiri'
                         log_to_database(track_id, "Keluar")
 
-                # Drawing
-                color = (0, 165, 255) if is_buyer else (0, 255, 0)
+                # Warna Bounding Box
+                color = (0, 165, 255) if is_buyer else ((255, 0, 0) if is_staff else (0, 255, 0))
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
         # Update Metrics Real-time

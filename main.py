@@ -94,23 +94,27 @@ run_camera = st.sidebar.checkbox("▶️ Aktifkan Kamera AI", value=False)
 show_charts = st.sidebar.checkbox("📈 Tampilkan Grafik Analitik", value=True)
 cam_index = st.sidebar.number_input("Pilih ID Kamera (0=Bawaan, 1=Eksternal)", min_value=0, max_value=5, value=0)
 
-# === FITUR BARU: PENGATURAN ZONA DINAMIS ===
+# === PENGATURAN ZONA & DURASI DINAMIS ===
 with st.sidebar.expander("⚙️ Konfigurasi Garis & Zona", expanded=False):
+    st.markdown("**Durasi Konversi (Detik)**")
+    STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, 10) # Default diubah ke 10 detik
+    BUYER_LIMIT = st.slider("Waktu Tunggu Pembeli", 1, 60, 10) # Default diubah ke 10 detik
+
     st.markdown("**Garis Pintu (Masuk/Keluar)**")
-    LINE_X = st.slider("Posisi Garis Pintu", 0, 1280, 640)
+    LINE_X = st.slider("Posisi Garis Pintu", 0, 640, 320)
     
     st.markdown("**Zona Staf (Biru)**")
-    stf_x = st.slider("Staf: Geser Kiri/Kanan", 0, 1000, 100)
-    stf_y = st.slider("Staf: Geser Atas/Bawah", 0, 600, 100)
-    stf_w = st.slider("Staf: Lebar Kotak", 50, 800, 300)
-    stf_h = st.slider("Staf: Tinggi Kotak", 50, 600, 300)
+    stf_x = st.slider("Staf: Posisi Kiri/Kanan (X)", 0, 640, 50)
+    stf_y = st.slider("Staf: Posisi Atas/Bawah (Y)", 0, 480, 50)
+    stf_w = st.slider("Staf: Lebar Kotak", 50, 640, 200)
+    stf_h = st.slider("Staf: Tinggi Kotak", 50, 480, 300)
     STAFF_ZONE = np.array([[stf_x, stf_y], [stf_x+stf_w, stf_y], [stf_x+stf_w, stf_y+stf_h], [stf_x, stf_y+stf_h]], np.int32)
     
     st.markdown("**Zona Kasir (Oranye)**")
-    ksr_x = st.slider("Kasir: Geser Kiri/Kanan", 0, 1000, 800)
-    ksr_y = st.slider("Kasir: Geser Atas/Bawah", 0, 600, 200)
-    ksr_w = st.slider("Kasir: Lebar Kotak", 50, 800, 400)
-    ksr_h = st.slider("Kasir: Tinggi Kotak", 50, 600, 400)
+    ksr_x = st.slider("Kasir: Posisi Kiri/Kanan (X)", 0, 640, 380)
+    ksr_y = st.slider("Kasir: Posisi Atas/Bawah (Y)", 0, 480, 50)
+    ksr_w = st.slider("Kasir: Lebar Kotak", 50, 640, 200)
+    ksr_h = st.slider("Kasir: Tinggi Kotak", 50, 480, 300)
     CASHIER_ZONE = np.array([[ksr_x, ksr_y], [ksr_x+ksr_w, ksr_y], [ksr_x+ksr_w, ksr_y+ksr_h], [ksr_x, ksr_y+ksr_h]], np.int32)
 
 @st.cache_resource
@@ -126,21 +130,20 @@ FRAME_WINDOW = col_vid.empty()
 # --- LOOP KAMERA ---
 if run_camera:
     cap = cv2.VideoCapture(cam_index)
-    cap.set(3, 1280); cap.set(4, 720) 
+    cap.set(3, 640); cap.set(4, 480) 
     
     while run_camera:
         ret, frame = cap.read()
         if not ret: break
         
-        # Visualisasi Zona dari Nilai Slider Dinamis
-        cv2.line(frame, (LINE_X, 0), (LINE_X, 720), (0, 255, 255), 2)
+        cv2.line(frame, (LINE_X, 0), (LINE_X, 480), (0, 255, 255), 2)
         cv2.polylines(frame, [STAFF_ZONE], True, (255, 0, 0), 2)
-        cv2.putText(frame, "ZONA STAF", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+        cv2.putText(frame, "ZONA STAF", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
         
         cv2.polylines(frame, [CASHIER_ZONE], True, (0, 165, 255), 2)
-        cv2.putText(frame, "ZONA KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
+        cv2.putText(frame, "ZONA KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 2)
 
-        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.5)
+        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.5, imgsz=320)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -153,13 +156,14 @@ if run_camera:
                 is_staff = track_id in st.session_state.staff_ids
                 is_buyer = track_id in st.session_state.buyer_ids
                 
+                # --- LOGIKA STAF (Dinamis) ---
                 if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff:
                     if track_id not in st.session_state.staff_zone_timers:
                         st.session_state.staff_zone_timers[track_id] = time.time()
                     else:
                         elapsed = time.time() - st.session_state.staff_zone_timers[track_id]
                         cv2.putText(frame, f"{int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-                        if elapsed >= 30:
+                        if elapsed >= STAFF_LIMIT:
                             st.session_state.staff_ids.add(track_id)
                             remove_false_visitor(track_id)
                             log_to_database(track_id, "Staf Aktif")
@@ -169,19 +173,21 @@ if run_camera:
 
                 if is_staff: continue
 
+                # --- LOGIKA PEMBELI (Dinamis) ---
                 if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
                     if track_id not in st.session_state.cashier_zone_timers:
                         st.session_state.cashier_zone_timers[track_id] = time.time()
                     else:
                         elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
                         cv2.putText(frame, f"Antre: {int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 2)
-                        if elapsed >= 20:
+                        if elapsed >= BUYER_LIMIT:
                             st.session_state.buyer_ids.add(track_id)
                             st.session_state.count_buyer += 1
                             log_to_database(track_id, "Pembeli Baru")
                 elif track_id in st.session_state.cashier_zone_timers:
                     del st.session_state.cashier_zone_timers[track_id]
 
+                # --- LOGIKA MASUK/KELUAR GARIS PINTU ---
                 if track_id not in st.session_state.track_states:
                     st.session_state.track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
                 else:
@@ -195,18 +201,19 @@ if run_camera:
                         st.session_state.track_states[track_id] = 'kiri'
                         log_to_database(track_id, "Keluar")
 
+                # --- UBAH WARNA OTOMATIS BERDASARKAN STATUS ---
                 color = (0, 165, 255) if is_buyer else ((255, 0, 0) if is_staff else (0, 255, 0))
                 role_text = "STAFF" if is_staff else ("PEMBELI" if is_buyer else "PENGUNJUNG")
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(frame, f"ID:{track_id} {role_text}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
+        # Update Metrics Real-time dengan teks dinamis
         val_in.metric("Total Masuk (Hari Ini)", st.session_state.count_in)
-        val_buy.metric("Total Pembeli (Hari Ini)", st.session_state.count_buyer)
+        val_buy.metric(f"Total Pembeli (Dwell > {BUYER_LIMIT}s)", st.session_state.count_buyer)
         rate = round((st.session_state.count_buyer / st.session_state.count_in * 100), 1) if st.session_state.count_in > 0 else 0
         val_rate.metric("Conversion Rate", f"{rate}%")
 
-        frame_ui = cv2.resize(frame, (640, 360))
-        FRAME_WINDOW.image(cv2.cvtColor(frame_ui, cv2.COLOR_BGR2RGB), use_container_width=True)
+        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
     cap.release()
 
 # --- AREA GRAFIK (DI BAWAH VIDEO) ---

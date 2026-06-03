@@ -1,5 +1,5 @@
 import streamlit as st
-from ultralytics import YOLO
+from ultralytics import YOLO, RTDETR
 import cv2
 import numpy as np
 import time
@@ -119,7 +119,7 @@ with st.sidebar.expander("⚙️ Konfigurasi Garis & Zona", expanded=False):
 
 @st.cache_resource
 def load_model():
-    return YOLO('yolo11n.pt')
+    return RTDETR('yolo11n.pt')
 model = load_model()
 
 # --- AREA VIDEO ---

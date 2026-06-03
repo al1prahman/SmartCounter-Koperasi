@@ -119,7 +119,7 @@ with st.sidebar.expander("⚙️ Konfigurasi Garis & Zona", expanded=False):
 
 @st.cache_resource
 def load_model():
-    return YOLO('yolov8n.pt')
+    return YOLO('yolo11n.pt')
 model = load_model()
 
 # --- AREA VIDEO ---
@@ -168,40 +168,42 @@ if run_camera:
                             remove_false_visitor(track_id)
                             log_to_database(track_id, "Staf Aktif")
                             st.session_state.count_in = max(0, st.session_state.count_in - 1)
+                            is_staff = True # Segera update status agar warnanya langsung berubah
                 elif track_id in st.session_state.staff_zone_timers:
                     del st.session_state.staff_zone_timers[track_id]
 
-                if is_staff: continue
+                # --- BLOKIR STAF AGAR TIDAK TERHITUNG SEBAGAI PEMBELI/PENGUNJUNG ---
+                if not is_staff:
+                    # --- LOGIKA PEMBELI (Dinamis) ---
+                    if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
+                        if track_id not in st.session_state.cashier_zone_timers:
+                            st.session_state.cashier_zone_timers[track_id] = time.time()
+                        else:
+                            elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
+                            cv2.putText(frame, f"Antre: {int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 2)
+                            if elapsed >= BUYER_LIMIT:
+                                st.session_state.buyer_ids.add(track_id)
+                                st.session_state.count_buyer += 1
+                                log_to_database(track_id, "Pembeli Baru")
+                    elif track_id in st.session_state.cashier_zone_timers:
+                        del st.session_state.cashier_zone_timers[track_id]
 
-                # --- LOGIKA PEMBELI (Dinamis) ---
-                if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
-                    if track_id not in st.session_state.cashier_zone_timers:
-                        st.session_state.cashier_zone_timers[track_id] = time.time()
+                    # --- LOGIKA MASUK/KELUAR GARIS PINTU ---
+                    if track_id not in st.session_state.track_states:
+                        st.session_state.track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
                     else:
-                        elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
-                        cv2.putText(frame, f"Antre: {int(elapsed)}s", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 2)
-                        if elapsed >= BUYER_LIMIT:
-                            st.session_state.buyer_ids.add(track_id)
-                            st.session_state.count_buyer += 1
-                            log_to_database(track_id, "Pembeli Baru")
-                elif track_id in st.session_state.cashier_zone_timers:
-                    del st.session_state.cashier_zone_timers[track_id]
-
-                # --- LOGIKA MASUK/KELUAR GARIS PINTU ---
-                if track_id not in st.session_state.track_states:
-                    st.session_state.track_states[track_id] = 'kiri' if cx < LINE_X else 'kanan'
-                else:
-                    current_state = st.session_state.track_states[track_id]
-                    if current_state == 'kiri' and cx > LINE_X + 40:
-                        st.session_state.count_in += 1
-                        st.session_state.track_states[track_id] = 'kanan'
-                        log_to_database(track_id, "Masuk")
-                    elif current_state == 'kanan' and cx < LINE_X - 40:
-                        st.session_state.count_out += 1
-                        st.session_state.track_states[track_id] = 'kiri'
-                        log_to_database(track_id, "Keluar")
+                        current_state = st.session_state.track_states[track_id]
+                        if current_state == 'kiri' and cx > LINE_X + 40:
+                            st.session_state.count_in += 1
+                            st.session_state.track_states[track_id] = 'kanan'
+                            log_to_database(track_id, "Masuk")
+                        elif current_state == 'kanan' and cx < LINE_X - 40:
+                            st.session_state.count_out += 1
+                            st.session_state.track_states[track_id] = 'kiri'
+                            log_to_database(track_id, "Keluar")
 
                 # --- UBAH WARNA OTOMATIS BERDASARKAN STATUS ---
+                # (Sekarang baris ini tidak akan dilewati lagi oleh Staf)
                 color = (0, 165, 255) if is_buyer else ((255, 0, 0) if is_staff else (0, 255, 0))
                 role_text = "STAFF" if is_staff else ("PEMBELI" if is_buyer else "PENGUNJUNG")
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)

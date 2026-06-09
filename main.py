@@ -9,7 +9,7 @@ from datetime import datetime
 import plotly.graph_objects as go
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Koperasi Merah Putih Smart Monitor", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="KMP Smart Monitor", layout="wide", initial_sidebar_state="expanded")
 
 # --- INJEKSI CSS UNTUK DESAIN DARK THEME SaaS ---
 st.markdown("""
@@ -17,6 +17,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     
+    /* Mengembalikan tombol sidebar dan menyembunyikan elemen tak perlu */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {background-color: transparent !important;}
@@ -57,7 +58,7 @@ st.markdown("""
 # --- HEADER CUSTOM ---
 st.markdown("""
 <div class="top-nav">
-    <div style="font-size: 18px; letter-spacing: 0.5px;">Koperasi Merah Putih Smart Monitor</div>
+    <div style="font-size: 18px; letter-spacing: 0.5px;">KMP Smart Monitor</div>
     <div style="display: flex; gap: 20px; align-items: center; color: #A0AEC0; font-weight: 400; font-size: 14px;">
         <div class="status-live"><span></span> LIVE</div>
     </div>
@@ -164,35 +165,43 @@ def update_metrics_ui():
 
 update_metrics_ui()
 
-# --- AREA GRAFIK (PLOTLY) ---
+# --- AREA GRAFIK & LOG (TATA LETAK BARU) ---
 df_h, df_d = get_chart_data()
-col_ch1, col_ch2 = st.columns([6, 4])
+col_left, col_right = st.columns([6, 4])
 
-with col_ch1:
+with col_left:
     st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Hourly Traffic Today</div>', unsafe_allow_html=True)
     if not df_h.empty:
         fig1 = go.Figure()
         fig1.add_trace(go.Scatter(x=df_h['jam'].astype(str) + ':00', y=df_h['total'], mode='lines', name='Visitors', line=dict(color='#00C9A7', width=3, shape='spline'), fill='tozeroy', fillcolor='rgba(0, 201, 167, 0.1)'))
-        fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0))
+        fig1.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0))
         fig1.update_xaxes(showgrid=False, linecolor='#1E4D8C')
         fig1.update_yaxes(showgrid=True, gridcolor='#1E4D8C', gridwidth=1, griddash='dash')
         st.plotly_chart(fig1, use_container_width=True)
     else:
         st.info("Belum ada data jam ini.")
 
-with col_ch2:
+    st.markdown('<div style="color:white; font-weight:600; margin-top:15px; margin-bottom:10px;">Recent Activity Log</div>', unsafe_allow_html=True)
+    LOG_WINDOW = st.empty()
+
+with col_right:
     st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">7-Day Visitor vs Buyer</div>', unsafe_allow_html=True)
     if not df_d.empty:
         fig2 = go.Figure(data=[
             go.Bar(name='Visitors', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7', marker_line_width=0),
             go.Bar(name='Buyers', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#FF6B35', marker_line_width=0)
         ])
-        fig2.update_layout(barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+        fig2.update_layout(height=560, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
         fig2.update_xaxes(showgrid=False, linecolor='#1E4D8C')
         fig2.update_yaxes(showgrid=True, gridcolor='#1E4D8C', griddash='dash')
         st.plotly_chart(fig2, use_container_width=True)
     else:
         st.info("Data historis tidak ditemukan.")
+
+# --- AREA VIDEO (FULL WIDTH DI BAWAH) ---
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Live Feed Active — YOLOv8n (Full View)</div>', unsafe_allow_html=True)
+FRAME_WINDOW = st.empty()
 
 # --- SIDEBAR CONTROLS ---
 st.sidebar.markdown('<div style="color:white; font-size:18px; font-weight:600; margin-bottom:20px;">Admin Panel<br><span style="color:#A0AEC0; font-size:12px; font-weight:400;">Operational View</span></div>', unsafe_allow_html=True)
@@ -250,15 +259,6 @@ def load_model():
     return YOLO('yolov8n.pt')
 model = load_model()
 
-# --- UI: SECTION 4 - VIDEO & LOGS ---
-col_vid, col_log = st.columns([6, 4])
-with col_vid:
-    st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">📹 Live Feed Active — YOLOv8n</div>', unsafe_allow_html=True)
-    FRAME_WINDOW = st.empty()
-with col_log:
-    st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Recent Activity Log</div>', unsafe_allow_html=True)
-    LOG_WINDOW = st.empty()
-
 # --- LOOP UTAMA KAMERA ---
 if run_camera and video_path is not None:
     cap = cv2.VideoCapture(video_path)
@@ -287,11 +287,18 @@ if run_camera and video_path is not None:
         canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame_resized
         frame = canvas
 
-        # Gambarkan Garis & Zona
+        # Gambarkan Garis Pintu
         if LINE_ORIENT == "Vertikal":
             cv2.line(frame, (LINE_POS, 0), (LINE_POS, 480), (30, 77, 140), 2)
         else:
             cv2.line(frame, (0, LINE_POS), (640, LINE_POS), (30, 77, 140), 2)
+
+        # Gambarkan Area Poligon Zona
+        cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
+        cv2.putText(frame, "STAFF ZONE", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 100, 50), 1)
+
+        cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
+        cv2.putText(frame, "CASHIER ZONE", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
 
         results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.4, imgsz=320)
         
@@ -340,31 +347,55 @@ if run_camera and video_path is not None:
                             st.session_state.track_states[track_id] = 'kiri' if cx < LINE_POS else 'kanan'
                         else:
                             current_state = st.session_state.track_states[track_id]
-                            if current_state == 'kiri' and cx > LINE_POS + 30:
-                                st.session_state.count_in += 1
+                            
+                            if current_state == 'kiri' and cx > LINE_POS + 15:
+                                if ENTRY_DIR == "Kiri ke Kanan":
+                                    st.session_state.count_in += 1
+                                    log_to_database(track_id, "Masuk")
+                                    add_log(track_id, "Entry", "Main Door")
+                                else:
+                                    st.session_state.count_out += 1
+                                    log_to_database(track_id, "Keluar")
+                                    add_log(track_id, "Exit", "Main Door")
                                 st.session_state.track_states[track_id] = 'kanan'
-                                log_to_database(track_id, "Masuk")
-                                add_log(track_id, "Entry", "Main Door")
-                            elif current_state == 'kanan' and cx < LINE_POS - 30:
-                                st.session_state.count_out += 1
+                                
+                            elif current_state == 'kanan' and cx < LINE_POS - 15:
+                                if ENTRY_DIR == "Kiri ke Kanan":
+                                    st.session_state.count_out += 1
+                                    log_to_database(track_id, "Keluar")
+                                    add_log(track_id, "Exit", "Main Door")
+                                else:
+                                    st.session_state.count_in += 1
+                                    log_to_database(track_id, "Masuk")
+                                    add_log(track_id, "Entry", "Main Door")
                                 st.session_state.track_states[track_id] = 'kiri'
-                                log_to_database(track_id, "Keluar")
-                                add_log(track_id, "Exit", "Main Door")
                     else:
                         if track_id not in st.session_state.track_states:
                             st.session_state.track_states[track_id] = 'atas' if cy < LINE_POS else 'bawah'
                         else:
                             current_state = st.session_state.track_states[track_id]
-                            if current_state == 'atas' and cy > LINE_POS + 30:
-                                st.session_state.count_in += 1
+                            
+                            if current_state == 'atas' and cy > LINE_POS + 15:
+                                if ENTRY_DIR == "Atas ke Bawah":
+                                    st.session_state.count_in += 1
+                                    log_to_database(track_id, "Masuk")
+                                    add_log(track_id, "Entry", "Main Door")
+                                else:
+                                    st.session_state.count_out += 1
+                                    log_to_database(track_id, "Keluar")
+                                    add_log(track_id, "Exit", "Main Door")
                                 st.session_state.track_states[track_id] = 'bawah'
-                                log_to_database(track_id, "Masuk")
-                                add_log(track_id, "Entry", "Main Door")
-                            elif current_state == 'bawah' and cy < LINE_POS - 30:
-                                st.session_state.count_out += 1
+                                
+                            elif current_state == 'bawah' and cy < LINE_POS - 15:
+                                if ENTRY_DIR == "Atas ke Bawah":
+                                    st.session_state.count_out += 1
+                                    log_to_database(track_id, "Keluar")
+                                    add_log(track_id, "Exit", "Main Door")
+                                else:
+                                    st.session_state.count_in += 1
+                                    log_to_database(track_id, "Masuk")
+                                    add_log(track_id, "Entry", "Main Door")
                                 st.session_state.track_states[track_id] = 'atas'
-                                log_to_database(track_id, "Keluar")
-                                add_log(track_id, "Exit", "Main Door")
 
                 # Flat UI Bounding Boxes
                 color = (53, 107, 255) if is_buyer else ((200, 100, 50) if is_staff else (167, 201, 0))

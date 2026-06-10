@@ -300,7 +300,7 @@ if run_camera and video_path is not None:
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
         cv2.putText(frame, "CASHIER ZONE", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
 
-        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.4, imgsz=320)
+        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml")
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()

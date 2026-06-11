@@ -132,13 +132,6 @@ def log_to_database(track_id, event_type):
             db.commit()
         except: pass
 
-def remove_false_visitor(track_id):
-    if cursor:
-        try:
-            cursor.execute("DELETE FROM visitor_logs WHERE track_id = %s AND event_type IN ('Masuk', 'Keluar')", (int(track_id),))
-            db.commit()
-        except: pass
-
 def add_log(track_id, event, zone, duration="-"):
     time_str = datetime.now().strftime("%H:%M:%S")
     st.session_state.recent_logs.insert(0, {"time": time_str, "id": f"#{track_id:04d}", "event": event, "zone": zone, "duration": duration})
@@ -147,15 +140,18 @@ def add_log(track_id, event, zone, duration="-"):
 def render_log_table():
     html = '<table class="log-table"><tr><th>Waktu</th><th>ID</th><th>Peristiwa</th><th>Zona</th><th>Durasi</th></tr>'
     for log in st.session_state.recent_logs:
-        badge_class = "badge-entry" if log['event'] == "Masuk" else ("badge-buyer" if log['event'] == "Pembeli Terkonfirmasi" else "badge-staff")
+        badge_class = "badge-entry" if log['event'] == "Masuk" else ("badge-buyer" if log['event'] == "Pembeli Baru" else "badge-staff")
         html += f"<tr><td>{log['time']}</td><td>{log['id']}</td><td><span class='{badge_class}'>{log['event']}</span></td><td>{log['zone']}</td><td>{log['duration']}</td></tr>"
     html += '</table>'
     return html
 
-if 'initialized' not in st.session_state:
+# --- INISIALISASI SESI & RESET HARIAN ---
+today_str = datetime.now().strftime('%Y-%m-%d')
+if 'initialized' not in st.session_state or st.session_state.get('current_date') != today_str:
     tin, tout, tbuy = fetch_today_stats()
     st.session_state.update({
         'initialized': True,
+        'current_date': today_str,
         'count_in': tin, 'count_out': tout, 'count_buyer': tbuy,
         'track_states': {}, 'staff_zone_timers': {}, 'cashier_zone_timers': {},
         'staff_ids': set(), 'buyer_ids': set(), 'recent_logs': []
@@ -246,7 +242,7 @@ def update_metrics_ui():
     c_buy = st.session_state.count_buyer
     c_out = st.session_state.count_out
     rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
-    occ = max(0, c_in - c_out)
+    occ = max(0, c_in - c_out) # Logika ini sekarang aman karena c_in tidak pernah dikurangi paksa
     
     ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK HARI INI</div><div class="metric-value val-white">{c_in}</div><div class="metric-sub">Pembaruan langsung</div></div>', unsafe_allow_html=True)
     ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-teal">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)
@@ -305,6 +301,10 @@ if run_camera and video_path is not None:
         
         frame_count += 1
         
+        # TEKNIK FRAME SKIPPING: Melewati setengah frame untuk menghilangkan LAG (FPS melesat)
+        if frame_count % 2 == 0:
+            continue
+        
         h_asli, w_asli = frame.shape[:2]
         target_w, target_h = 640, 480
         scale = min(target_w / w_asli, target_h / h_asli)
@@ -327,7 +327,8 @@ if run_camera and video_path is not None:
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
         cv2.putText(frame, "KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
 
-        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml")
+        # AKURASI TINGGI: imgsz=640 dan ByteTrack agar pendeteksian tidak terputus
+        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml", imgsz=640)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -340,21 +341,22 @@ if run_camera and video_path is not None:
                 is_staff = track_id in st.session_state.staff_ids
                 is_buyer = track_id in st.session_state.buyer_ids
                 
-                if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff:
+                # LOGIKA STAFF LOCK ABSOLUT
+                if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff and not is_buyer:
                     if track_id not in st.session_state.staff_zone_timers:
                         st.session_state.staff_zone_timers[track_id] = time.time()
                     else:
                         elapsed = time.time() - st.session_state.staff_zone_timers[track_id]
                         if elapsed >= STAFF_LIMIT:
                             st.session_state.staff_ids.add(track_id)
-                            remove_false_visitor(track_id)
                             log_to_database(track_id, "Staf Aktif")
                             add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
-                            st.session_state.count_in = max(0, st.session_state.count_in - 1)
                             is_staff = True
+                            # Catatan: Sengaja TIDAK MENGURANGI count_in agar data tetap stabil
                 elif track_id in st.session_state.staff_zone_timers:
                     del st.session_state.staff_zone_timers[track_id]
 
+                # PEMBELI & PENGUNJUNG (Hanya dieksekusi JIKA BUKAN STAFF)
                 if not is_staff:
                     if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
                         if track_id not in st.session_state.cashier_zone_timers:
@@ -365,7 +367,7 @@ if run_camera and video_path is not None:
                                 st.session_state.buyer_ids.add(track_id)
                                 st.session_state.count_buyer += 1
                                 log_to_database(track_id, "Pembeli Baru")
-                                add_log(track_id, "Pembeli Terkonfirmasi", "Kasir", f"{int(elapsed)}s")
+                                add_log(track_id, "Pembeli Baru", "Kasir", f"{int(elapsed)}s")
                     elif track_id in st.session_state.cashier_zone_timers:
                         del st.session_state.cashier_zone_timers[track_id]
 
@@ -430,6 +432,7 @@ if run_camera and video_path is not None:
                 cv2.rectangle(frame, (x1, y1-20), (x1+80, y1), color, -1)
                 cv2.putText(frame, f"ID:{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
 
+        # Optimasi UI: Memperbarui data teks setiap 5 siklus frame saja
         if frame_count % 5 == 0 or frame_count == 1:
             update_metrics_ui()
             LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)

@@ -72,7 +72,6 @@ st.markdown("""
     .badge-buyer { background-color: rgba(217, 86, 139, 0.2); color: #D9568B; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
     .badge-staff { background-color: rgba(30, 77, 140, 0.4); color: #82B1FF; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
     
-    /* Custom Expander Styling */
     .streamlit-expanderHeader { font-weight: 600 !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -128,6 +127,29 @@ def get_chart_data():
     df_days = pd.read_sql(query_days, db)
     return df_hour, df_days
 
+# FUNGSI BARU UNTUK EKSPOR CSV
+def get_export_data(start_date, end_date):
+    if not cursor: return pd.DataFrame()
+    query = """
+        SELECT 
+            DATE(created_at) as Tanggal,
+            SUM(CASE WHEN event_type = 'Masuk' THEN 1 ELSE 0 END) as 'Total Pengunjung',
+            SUM(CASE WHEN event_type = 'Pembeli Baru' THEN 1 ELSE 0 END) as 'Total Pembeli',
+            SUM(CASE WHEN event_type = 'Staf Aktif' THEN 1 ELSE 0 END) as 'Jumlah Staf'
+        FROM visitor_logs
+        WHERE DATE(created_at) >= %s AND DATE(created_at) <= %s
+        GROUP BY Tanggal
+        ORDER BY Tanggal ASC
+    """
+    cursor.execute(query, (start_date, end_date))
+    rows = cursor.fetchall()
+    cols = ['Tanggal', 'Total Pengunjung', 'Total Pembeli', 'Jumlah Staf']
+    df = pd.DataFrame(rows, columns=cols)
+    if not df.empty:
+        df['Tingkat Konversi (%)'] = (df['Total Pembeli'] / df['Total Pengunjung'] * 100).fillna(0).round(1)
+        df['Tingkat Konversi (%)'] = df['Tingkat Konversi (%)'].replace([np.inf, -np.inf], 0)
+    return df
+
 def log_to_database(track_id, event_type):
     if cursor:
         try:
@@ -176,12 +198,39 @@ else:
             f.write(uploaded_file.read())
         video_path = "temp_video.mp4"
 
-# MENGUBAH CHECKBOX MENJADI TOGGLE (TOMBOL SWITCH)
 run_camera = st.sidebar.toggle("▶️ Mulai Sistem AI", value=False)
+
+# === FITUR EKSPOR LAPORAN CSV ===
+st.sidebar.markdown("---")
+st.sidebar.markdown('<div style="color:white; font-size:16px; font-weight:600; margin-bottom:10px;">📥 Ekspor Laporan</div>', unsafe_allow_html=True)
+date_selection = st.sidebar.date_input("Pilih Rentang Tanggal:", value=[])
+
+show_preview = False
+df_export = pd.DataFrame()
+
+if len(date_selection) > 0:
+    start_date = date_selection[0]
+    end_date = date_selection[1] if len(date_selection) > 1 else date_selection[0]
+    
+    df_export = get_export_data(start_date, end_date)
+    
+    if not df_export.empty:
+        csv = df_export.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            label="⬇️ Unduh Berkas CSV",
+            data=csv,
+            file_name=f"Laporan_KMP_{start_date}_sd_{end_date}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            type="primary"
+        )
+        show_preview = st.sidebar.toggle("📊 Tampilkan Pratinjau Visual")
+    else:
+        st.sidebar.warning("Tidak ada riwayat pada tanggal tersebut.")
 
 st.sidebar.markdown("---")
 
-# === PENGATURAN GARIS PINTU (MEMBACA DARI CONFIG) ===
+# === PENGATURAN GARIS PINTU ===
 st.sidebar.subheader("🚪 Pengaturan Garis Pintu")
 idx_orient = 0 if cfg["LINE_ORIENT"] == "Vertikal" else 1
 LINE_ORIENT = st.sidebar.selectbox("Orientasi Garis Pintu", ["Vertikal", "Horizontal"], index=idx_orient)
@@ -195,7 +244,7 @@ else:
     idx_dir = 0 if cfg["ENTRY_DIR"] == "Atas ke Bawah" else 1
     ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Atas ke Bawah", "Bawah ke Atas"], index=idx_dir)
 
-# === KONFIGURASI ZONA & WAKTU (MEMBACA DARI CONFIG) ===
+# === KONFIGURASI ZONA & WAKTU ===
 with st.sidebar.expander("🔲 Konfigurasi Zona & Waktu Tunggu", expanded=False):
     st.markdown("**Durasi Konversi (Detik)**")
     STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, cfg["STAFF_LIMIT"]) 
@@ -216,7 +265,6 @@ with st.sidebar.expander("🔲 Konfigurasi Zona & Waktu Tunggu", expanded=False)
     ksr_h = st.slider("Kasir: Tinggi", 50, 480, cfg["ksr_h"])
     CASHIER_ZONE = np.array([[ksr_x, ksr_y], [ksr_x+ksr_w, ksr_y], [ksr_x+ksr_w, ksr_y+ksr_h], [ksr_x, ksr_y+ksr_h]], np.int32)
 
-# SIMPAN PERUBAHAN KE FILE JSON SECARA OTOMATIS
 new_cfg = {
     "LINE_ORIENT": LINE_ORIENT, "LINE_POS": LINE_POS, "ENTRY_DIR": ENTRY_DIR,
     "STAFF_LIMIT": STAFF_LIMIT, "BUYER_LIMIT": BUYER_LIMIT,
@@ -230,233 +278,269 @@ def load_model():
     return YOLO('best.pt')
 model = load_model()
 
-st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLO11n (Tampilan Penuh)</div>', unsafe_allow_html=True)
-FRAME_WINDOW = st.empty()
-st.markdown("<br>", unsafe_allow_html=True)
-
-# --- TATA LETAK 2: UI METRIK ---
-col1, col2, col3, col4 = st.columns(4)
-ph_in = col1.empty()
-ph_buy = col2.empty()
-ph_rate = col3.empty()
-ph_occ = col4.empty()
-
-def update_metrics_ui():
-    c_in = st.session_state.count_in
-    c_buy = st.session_state.count_buyer
-    c_out = st.session_state.count_out
-    rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
-    occ = max(0, c_in - c_out) 
+# ==========================================
+# RENDER UTAMA BERDASARKAN MODE (PREVIEW / DASHBOARD)
+# ==========================================
+if show_preview and not df_export.empty:
+    # MODE 1: TAMPILAN PRATINJAU LAPORAN
+    st.markdown('<div class="metric-card"><div style="color:white; font-weight:600; font-size:20px; margin-bottom:10px;">📊 Pratinjau Laporan (Visualisasi Ekspor CSV)</div>', unsafe_allow_html=True)
+    st.dataframe(df_export, use_container_width=True, hide_index=True)
     
-    ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK HARI INI</div><div class="metric-value val-white">{c_in}</div><div class="metric-sub">Pembaruan langsung</div></div>', unsafe_allow_html=True)
-    ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)
-    ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">TINGKAT KONVERSI</div><div class="metric-value val-teal">{rate}%</div><div class="metric-sub">Pengunjung → Pembeli</div></div>', unsafe_allow_html=True)
-    ph_occ.markdown(f'<div class="metric-card"><div class="metric-title">PENGUNJUNG DI DALAM</div><div class="metric-value val-white">{occ}</div><div class="metric-sub">Di dalam toko saat ini</div></div>', unsafe_allow_html=True)
-
-update_metrics_ui()
-
-# --- TATA LETAK 3: AREA GRAFIK & LOG ---
-df_h, df_d = get_chart_data()
-col_left, col_right = st.columns([6, 4])
-
-with col_left:
-    st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
-    if not df_h.empty:
-        fig1 = go.Figure()
-        # MENGUBAH TAMPILAN GRAFIK MENJADI PINK KALEM & CLEAN SEPERTI GAMBAR
-        fig1.add_trace(go.Bar(
-            x=df_h['jam'].astype(str) + ':00', 
-            y=df_h['total'], 
-            marker_color='#D9568B', 
-            name='Pengunjung',
-            hovertemplate='<b>WAKTU %{x}</b><br>TOTAL %{y}<extra></extra>'
-        ))
-        fig1.update_layout(
-            height=280, 
-            paper_bgcolor='rgba(0,0,0,0)', 
-            plot_bgcolor='rgba(0,0,0,0)', 
-            font_color='#A0AEC0', 
-            margin=dict(l=0, r=0, t=10, b=0),
-            bargap=0.05, # Merapatkan jarak antar bar seperti gambar
-            hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
-        )
-        fig1.update_xaxes(showgrid=False, linecolor='#1E4D8C')
-        fig1.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1) # Grid lebih transparan
-        st.plotly_chart(fig1, use_container_width=True)
-    else:
-        st.info("Belum ada data jam ini.")
-
-    # MENGUBAH LOG MENJADI DROPDOWN (EXPANDER)
-    with st.expander("📋 Log Aktivitas Terkini", expanded=False):
-        LOG_WINDOW = st.empty()
-
-with col_right:
-    st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Pengunjung vs Pembeli (7 Hari)</div>', unsafe_allow_html=True)
-    if not df_d.empty:
-        fig2 = go.Figure(data=[
-            go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7', marker_line_width=0),
-            go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B', marker_line_width=0)
+    colA, colB = st.columns(2)
+    with colA:
+        # Chart 1: Perbandingan Pengunjung vs Pembeli
+        fig_comp = go.Figure(data=[
+            go.Bar(name='Pengunjung', x=df_export['Tanggal'].astype(str), y=df_export['Total Pengunjung'], marker_color='#00C9A7'),
+            go.Bar(name='Pembeli', x=df_export['Tanggal'].astype(str), y=df_export['Total Pembeli'], marker_color='#D9568B')
         ])
-        fig2.update_layout(
-            height=560, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-            font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False,
-            hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
-        )
-        fig2.update_xaxes(showgrid=False, linecolor='#1E4D8C')
-        fig2.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("Data historis tidak ditemukan.")
-
-# --- LOOP UTAMA KAMERA ---
-if run_camera and video_path is not None:
-    cap = cv2.VideoCapture(video_path)
-    if video_source == "Kamera Live":
-        cap.set(3, 640); cap.set(4, 480)
+        fig_comp.update_layout(title="Perbandingan Pengunjung vs Pembeli", barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', hoverlabel=dict(bgcolor="#1E293B", font_color="white"))
+        fig_comp.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
+        st.plotly_chart(fig_comp, use_container_width=True)
         
-    frame_count = 0
-    
-    while run_camera:
-        ret, frame = cap.read()
-        if not ret:
-            st.success("✅ Pemutaran video selesai!")
-            break
-        
-        frame_count += 1
-        
-        if frame_count % 2 == 0:
-            continue
-        
-        h_asli, w_asli = frame.shape[:2]
-        target_w, target_h = 640, 480
-        scale = min(target_w / w_asli, target_h / h_asli)
-        new_w, new_h = int(w_asli * scale), int(h_asli * scale)
-        frame_resized = cv2.resize(frame, (new_w, new_h))
-        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-        x_offset = (target_w - new_w) // 2
-        y_offset = (target_h - new_h) // 2
-        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame_resized
-        frame = canvas
-
-        if LINE_ORIENT == "Vertikal":
-            cv2.line(frame, (LINE_POS, 0), (LINE_POS, 480), (30, 77, 140), 2)
+    with colB:
+        # Chart 2: Menyesuaikan apakah 1 hari atau rentang hari
+        if len(df_export) > 1:
+            # Jika rentang hari: Tampilkan Hari Paling Ramai vs Sepi
+            df_sorted = df_export.sort_values(by='Total Pengunjung', ascending=True)
+            fig_ext = go.Figure(go.Bar(
+                x=df_sorted['Total Pengunjung'], y=df_sorted['Tanggal'].astype(str), orientation='h', marker_color='#82B1FF'
+            ))
+            fig_ext.update_layout(title="Peringkat Hari (Paling Sepi ke Ramai)", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', hoverlabel=dict(bgcolor="#1E293B", font_color="white"))
+            fig_ext.update_xaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
+            st.plotly_chart(fig_ext, use_container_width=True)
         else:
-            cv2.line(frame, (0, LINE_POS), (640, LINE_POS), (30, 77, 140), 2)
+            # Jika hanya 1 hari: Tampilkan Gauge Tingkat Konversi
+            rate = df_export.iloc[0]['Tingkat Konversi (%)']
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = rate,
+                title = {'text': "Tingkat Konversi", 'font': {'color': '#A0AEC0'}},
+                gauge = {'axis': {'range': [0, 100], 'tickcolor': '#A0AEC0'},
+                         'bar': {'color': "#D9568B"}}
+            ))
+            fig_gauge.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0')
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
-        cv2.putText(frame, "ZONA STAF", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 100, 50), 1)
-
-        cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
-        cv2.putText(frame, "KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
-
-        results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml", imgsz=640)
-        
-        if results[0].boxes is not None and results[0].boxes.id is not None:
-            boxes = results[0].boxes.xyxy.cpu().numpy()
-            ids = results[0].boxes.id.int().cpu().numpy()
-
-            for box, track_id in zip(boxes, ids):
-                x1, y1, x2, y2 = map(int, box)
-                cx, cy = (x1+x2)//2, (y1+y2)//2
-                
-                is_staff = track_id in st.session_state.staff_ids
-                is_buyer = track_id in st.session_state.buyer_ids
-                
-                if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff and not is_buyer:
-                    if track_id not in st.session_state.staff_zone_timers:
-                        st.session_state.staff_zone_timers[track_id] = time.time()
-                    else:
-                        elapsed = time.time() - st.session_state.staff_zone_timers[track_id]
-                        if elapsed >= STAFF_LIMIT:
-                            st.session_state.staff_ids.add(track_id)
-                            log_to_database(track_id, "Staf Aktif")
-                            add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
-                            is_staff = True
-                elif track_id in st.session_state.staff_zone_timers:
-                    del st.session_state.staff_zone_timers[track_id]
-
-                if not is_staff:
-                    if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
-                        if track_id not in st.session_state.cashier_zone_timers:
-                            st.session_state.cashier_zone_timers[track_id] = time.time()
-                        else:
-                            elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
-                            if elapsed >= BUYER_LIMIT:
-                                st.session_state.buyer_ids.add(track_id)
-                                st.session_state.count_buyer += 1
-                                log_to_database(track_id, "Pembeli Baru")
-                                add_log(track_id, "Pembeli Baru", "Kasir", f"{int(elapsed)}s")
-                    elif track_id in st.session_state.cashier_zone_timers:
-                        del st.session_state.cashier_zone_timers[track_id]
-
-                    if LINE_ORIENT == "Vertikal":
-                        if track_id not in st.session_state.track_states:
-                            st.session_state.track_states[track_id] = 'kiri' if cx < LINE_POS else 'kanan'
-                        else:
-                            current_state = st.session_state.track_states[track_id]
-                            
-                            if current_state == 'kiri' and cx > LINE_POS + 15:
-                                if ENTRY_DIR == "Kiri ke Kanan":
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                else:
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'kanan'
-                                
-                            elif current_state == 'kanan' and cx < LINE_POS - 15:
-                                if ENTRY_DIR == "Kiri ke Kanan":
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                else:
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'kiri'
-                    else:
-                        if track_id not in st.session_state.track_states:
-                            st.session_state.track_states[track_id] = 'atas' if cy < LINE_POS else 'bawah'
-                        else:
-                            current_state = st.session_state.track_states[track_id]
-                            
-                            if current_state == 'atas' and cy > LINE_POS + 15:
-                                if ENTRY_DIR == "Atas ke Bawah":
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                else:
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'bawah'
-                                
-                            elif current_state == 'bawah' and cy < LINE_POS - 15:
-                                if ENTRY_DIR == "Atas ke Bawah":
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                else:
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'atas'
-
-                color = (53, 107, 255) if is_buyer else ((200, 100, 50) if is_staff else (167, 201, 0))
-                label = "Pembeli" if is_buyer else ("Staf" if is_staff else "Pengunjung")
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
-                cv2.rectangle(frame, (x1, y1-20), (x1+80, y1), color, -1)
-                cv2.putText(frame, f"ID:{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
-
-        if frame_count % 5 == 0 or frame_count == 1:
-            update_metrics_ui()
-            LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
-
-        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-    cap.release()
 else:
-    # Memastikan log tabel tetap terender meskipun kamera mati
+    # MODE 2: DASHBOARD KAMERA UTAMA (Default)
+    st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLO11n (Tampilan Penuh)</div>', unsafe_allow_html=True)
+    FRAME_WINDOW = st.empty()
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col1, col2, col3, col4 = st.columns(4)
+    ph_in = col1.empty()
+    ph_buy = col2.empty()
+    ph_rate = col3.empty()
+    ph_occ = col4.empty()
+
+    def update_metrics_ui():
+        c_in = st.session_state.count_in
+        c_buy = st.session_state.count_buyer
+        c_out = st.session_state.count_out
+        rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
+        occ = max(0, c_in - c_out) 
+        
+        ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK HARI INI</div><div class="metric-value val-white">{c_in}</div><div class="metric-sub">Pembaruan langsung</div></div>', unsafe_allow_html=True)
+        ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)
+        ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">TINGKAT KONVERSI</div><div class="metric-value val-teal">{rate}%</div><div class="metric-sub">Pengunjung → Pembeli</div></div>', unsafe_allow_html=True)
+        ph_occ.markdown(f'<div class="metric-card"><div class="metric-title">PENGUNJUNG DI DALAM</div><div class="metric-value val-white">{occ}</div><div class="metric-sub">Di dalam toko saat ini</div></div>', unsafe_allow_html=True)
+
+    update_metrics_ui()
+
+    df_h, df_d = get_chart_data()
+    col_left, col_right = st.columns([6, 4])
+
     with col_left:
-        LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
+        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
+        if not df_h.empty:
+            fig1 = go.Figure()
+            fig1.add_trace(go.Bar(
+                x=df_h['jam'].astype(str) + ':00', 
+                y=df_h['total'], 
+                marker_color='#D9568B', 
+                name='Pengunjung',
+                hovertemplate='<b>WAKTU %{x}</b><br>TOTAL %{y}<extra></extra>'
+            ))
+            fig1.update_layout(
+                height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', 
+                margin=dict(l=0, r=0, t=10, b=0), bargap=0.05,
+                hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
+            )
+            fig1.update_xaxes(showgrid=False, linecolor='#1E4D8C')
+            fig1.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
+            st.plotly_chart(fig1, use_container_width=True)
+        else:
+            st.info("Belum ada data jam ini.")
+
+        with st.expander("📋 Log Aktivitas Terkini", expanded=False):
+            LOG_WINDOW = st.empty()
+
+    with col_right:
+        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Pengunjung vs Pembeli (7 Hari)</div>', unsafe_allow_html=True)
+        if not df_d.empty:
+            fig2 = go.Figure(data=[
+                go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7', marker_line_width=0),
+                go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B', marker_line_width=0)
+            ])
+            fig2.update_layout(
+                height=560, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False,
+                hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
+            )
+            fig2.update_xaxes(showgrid=False, linecolor='#1E4D8C')
+            fig2.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("Data historis tidak ditemukan.")
+
+    # --- LOOP UTAMA KAMERA ---
+    if run_camera and video_path is not None:
+        cap = cv2.VideoCapture(video_path)
+        if video_source == "Kamera Live":
+            cap.set(3, 640); cap.set(4, 480)
+            
+        frame_count = 0
+        
+        while run_camera:
+            ret, frame = cap.read()
+            if not ret:
+                st.success("✅ Pemutaran video selesai!")
+                break
+            
+            frame_count += 1
+            if frame_count % 2 == 0: continue
+            
+            h_asli, w_asli = frame.shape[:2]
+            target_w, target_h = 640, 480
+            scale = min(target_w / w_asli, target_h / h_asli)
+            new_w, new_h = int(w_asli * scale), int(h_asli * scale)
+            frame_resized = cv2.resize(frame, (new_w, new_h))
+            canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+            x_offset = (target_w - new_w) // 2
+            y_offset = (target_h - new_h) // 2
+            canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame_resized
+            frame = canvas
+
+            if LINE_ORIENT == "Vertikal":
+                cv2.line(frame, (LINE_POS, 0), (LINE_POS, 480), (30, 77, 140), 2)
+            else:
+                cv2.line(frame, (0, LINE_POS), (640, LINE_POS), (30, 77, 140), 2)
+
+            cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
+            cv2.putText(frame, "ZONA STAF", (STAFF_ZONE[0][0], STAFF_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 100, 50), 1)
+
+            cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
+            cv2.putText(frame, "KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
+
+            results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml", imgsz=640)
+            
+            if results[0].boxes is not None and results[0].boxes.id is not None:
+                boxes = results[0].boxes.xyxy.cpu().numpy()
+                ids = results[0].boxes.id.int().cpu().numpy()
+
+                for box, track_id in zip(boxes, ids):
+                    x1, y1, x2, y2 = map(int, box)
+                    cx, cy = (x1+x2)//2, (y1+y2)//2
+                    
+                    is_staff = track_id in st.session_state.staff_ids
+                    is_buyer = track_id in st.session_state.buyer_ids
+                    
+                    if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff and not is_buyer:
+                        if track_id not in st.session_state.staff_zone_timers:
+                            st.session_state.staff_zone_timers[track_id] = time.time()
+                        else:
+                            elapsed = time.time() - st.session_state.staff_zone_timers[track_id]
+                            if elapsed >= STAFF_LIMIT:
+                                st.session_state.staff_ids.add(track_id)
+                                log_to_database(track_id, "Staf Aktif")
+                                add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
+                                is_staff = True
+                    elif track_id in st.session_state.staff_zone_timers:
+                        del st.session_state.staff_zone_timers[track_id]
+
+                    if not is_staff:
+                        if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
+                            if track_id not in st.session_state.cashier_zone_timers:
+                                st.session_state.cashier_zone_timers[track_id] = time.time()
+                            else:
+                                elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
+                                if elapsed >= BUYER_LIMIT:
+                                    st.session_state.buyer_ids.add(track_id)
+                                    st.session_state.count_buyer += 1
+                                    log_to_database(track_id, "Pembeli Baru")
+                                    add_log(track_id, "Pembeli Baru", "Kasir", f"{int(elapsed)}s")
+                        elif track_id in st.session_state.cashier_zone_timers:
+                            del st.session_state.cashier_zone_timers[track_id]
+
+                        if LINE_ORIENT == "Vertikal":
+                            if track_id not in st.session_state.track_states:
+                                st.session_state.track_states[track_id] = 'kiri' if cx < LINE_POS else 'kanan'
+                            else:
+                                current_state = st.session_state.track_states[track_id]
+                                
+                                if current_state == 'kiri' and cx > LINE_POS + 15:
+                                    if ENTRY_DIR == "Kiri ke Kanan":
+                                        st.session_state.count_in += 1
+                                        log_to_database(track_id, "Masuk")
+                                        add_log(track_id, "Masuk", "Pintu Utama")
+                                    else:
+                                        st.session_state.count_out += 1
+                                        log_to_database(track_id, "Keluar")
+                                        add_log(track_id, "Keluar", "Pintu Utama")
+                                    st.session_state.track_states[track_id] = 'kanan'
+                                    
+                                elif current_state == 'kanan' and cx < LINE_POS - 15:
+                                    if ENTRY_DIR == "Kiri ke Kanan":
+                                        st.session_state.count_out += 1
+                                        log_to_database(track_id, "Keluar")
+                                        add_log(track_id, "Keluar", "Pintu Utama")
+                                    else:
+                                        st.session_state.count_in += 1
+                                        log_to_database(track_id, "Masuk")
+                                        add_log(track_id, "Masuk", "Pintu Utama")
+                                    st.session_state.track_states[track_id] = 'kiri'
+                        else:
+                            if track_id not in st.session_state.track_states:
+                                st.session_state.track_states[track_id] = 'atas' if cy < LINE_POS else 'bawah'
+                            else:
+                                current_state = st.session_state.track_states[track_id]
+                                
+                                if current_state == 'atas' and cy > LINE_POS + 15:
+                                    if ENTRY_DIR == "Atas ke Bawah":
+                                        st.session_state.count_in += 1
+                                        log_to_database(track_id, "Masuk")
+                                        add_log(track_id, "Masuk", "Pintu Utama")
+                                    else:
+                                        st.session_state.count_out += 1
+                                        log_to_database(track_id, "Keluar")
+                                        add_log(track_id, "Keluar", "Pintu Utama")
+                                    st.session_state.track_states[track_id] = 'bawah'
+                                    
+                                elif current_state == 'bawah' and cy < LINE_POS - 15:
+                                    if ENTRY_DIR == "Atas ke Bawah":
+                                        st.session_state.count_out += 1
+                                        log_to_database(track_id, "Keluar")
+                                        add_log(track_id, "Keluar", "Pintu Utama")
+                                    else:
+                                        st.session_state.count_in += 1
+                                        log_to_database(track_id, "Masuk")
+                                        add_log(track_id, "Masuk", "Pintu Utama")
+                                    st.session_state.track_states[track_id] = 'atas'
+
+                    color = (53, 107, 255) if is_buyer else ((200, 100, 50) if is_staff else (167, 201, 0))
+                    label = "Pembeli" if is_buyer else ("Staf" if is_staff else "Pengunjung")
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+                    cv2.rectangle(frame, (x1, y1-20), (x1+80, y1), color, -1)
+                    cv2.putText(frame, f"ID:{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
+
+            if frame_count % 5 == 0 or frame_count == 1:
+                update_metrics_ui()
+                LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
+
+            FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+        cap.release()
+    else:
+        with col_left:
+            LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)

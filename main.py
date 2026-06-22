@@ -215,15 +215,26 @@ if len(date_selection) > 0:
     df_export = get_export_data(start_date, end_date)
     
     if not df_export.empty:
-        csv = df_export.to_csv(index=False).encode('utf-8')
+        # 1. Menyisipkan kolom "No." di urutan paling kiri (indeks 0)
+        df_export.insert(0, 'No.', range(1, len(df_export) + 1))
+        
+        # 2. Mengonversi DataFrame ke format Excel murni (.xlsx) di dalam memori
+        from io import BytesIO
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_export.to_excel(writer, index=False, sheet_name='Laporan KMP')
+        excel_data = output.getvalue()
+        
+        # 3. Menampilkan tombol unduh Excel
         st.sidebar.download_button(
-            label="⬇️ Unduh Berkas CSV",
-            data=csv,
-            file_name=f"Laporan_KMP_{start_date}_sd_{end_date}.csv",
-            mime="text/csv",
+            label="⬇️ Unduh Berkas Excel",
+            data=excel_data,
+            file_name=f"Laporan_KMP_{start_date}_sd_{end_date}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             type="primary"
         )
+        
         show_preview = st.sidebar.toggle("📊 Tampilkan Pratinjau Visual")
     else:
         st.sidebar.warning("Tidak ada riwayat pada tanggal tersebut.")

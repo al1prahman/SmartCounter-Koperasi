@@ -200,7 +200,7 @@ else:
 
 run_camera = st.sidebar.toggle("▶️ Mulai Sistem AI", value=False)
 
-# === FITUR EKSPOR LAPORAN CSV ===
+# === FITUR EKSPOR LAPORAN EXCEL ===
 st.sidebar.markdown("---")
 st.sidebar.markdown('<div style="color:white; font-size:16px; font-weight:600; margin-bottom:10px;">📥 Ekspor Laporan</div>', unsafe_allow_html=True)
 date_selection = st.sidebar.date_input("Pilih Rentang Tanggal:", value=[])
@@ -218,14 +218,40 @@ if len(date_selection) > 0:
         # 1. Menyisipkan kolom "No." di urutan paling kiri (indeks 0)
         df_export.insert(0, 'No.', range(1, len(df_export) + 1))
         
-        # 2. Mengonversi DataFrame ke format Excel murni (.xlsx) di dalam memori
+        # 2. Mengonversi DataFrame ke format Excel murni (.xlsx) beserta Styling-nya
         from io import BytesIO
+        from openpyxl.styles import Border, Side, Font, Alignment
+        
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_export.to_excel(writer, index=False, sheet_name='Laporan KMP')
+            
+            worksheet = writer.sheets['Laporan KMP']
+            
+            # Membuat gaya garis batas (border tipis)
+            thin_border = Border(
+                left=Side(style='thin'), right=Side(style='thin'), 
+                top=Side(style='thin'), bottom=Side(style='thin')
+            )
+            
+            # Menyesuaikan lebar kolom secara otomatis agar tanggal tidak menjadi ########
+            for idx, col in enumerate(df_export.columns):
+                col_letter = worksheet.cell(row=1, column=idx+1).column_letter
+                # Menghitung panjang teks maksimal di setiap kolom
+                max_len = max(df_export[col].astype(str).map(len).max(), len(str(col))) + 4
+                worksheet.column_dimensions[col_letter].width = max_len
+                
+            # Mengaplikasikan border, posisi teks ke tengah, dan menebalkan Header
+            for row in worksheet.iter_rows(min_row=1, max_row=worksheet.max_row, min_col=1, max_col=worksheet.max_column):
+                for cell in row:
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+                    if cell.row == 1: # Jika ini baris pertama (Header)
+                        cell.font = Font(bold=True)
+                        
         excel_data = output.getvalue()
         
-        # 3. Menampilkan tombol unduh Excel
+        # 3. Menampilkan tombol unduh
         st.sidebar.download_button(
             label="⬇️ Unduh Berkas Excel",
             data=excel_data,

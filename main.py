@@ -11,7 +11,7 @@ import json
 import os
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="KMP Monitor Pintar", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Smart Counter Koperasi Merah Putih", layout="wide", initial_sidebar_state="expanded")
 
 # --- MANAJEMEN KONFIGURASI (PERSISTENSI) ---
 CONFIG_FILE = "ui_config.json"
@@ -79,7 +79,7 @@ st.markdown("""
 # --- HEADER CUSTOM ---
 st.markdown("""
 <div class="top-nav">
-    <div style="font-size: 18px; letter-spacing: 0.5px;">KMP Monitor Pintar</div>
+    <div style="font-size: 18px; letter-spacing: 0.5px;">Smart Counter Koperasi Merah Putih</div>
     <div style="display: flex; gap: 20px; align-items: center; color: #A0AEC0; font-weight: 400; font-size: 14px;">
         <div class="status-live"><span></span> LIVE</div>
     </div>
@@ -185,24 +185,24 @@ if 'initialized' not in st.session_state or st.session_state.get('current_date')
 
 # --- SIDEBAR CONTROLS ---
 st.sidebar.markdown('<div style="color:white; font-size:18px; font-weight:600; margin-bottom:20px;">Panel Admin<br><span style="color:#A0AEC0; font-size:12px; font-weight:400;">Tampilan Operasional</span></div>', unsafe_allow_html=True)
-video_source = st.sidebar.radio("📽️ Sumber Kamera:", ["Kamera Live", "Unggah Video (MP4)"])
+video_source = st.sidebar.radio("Sumber Deteksi:", ["Kamera Live", "Unggah Video (MP4)"])
 
 video_path = None
 if video_source == "Kamera Live":
     cam_index = st.sidebar.number_input("Pilih ID Kamera", min_value=0, max_value=5, value=0)
     video_path = cam_index
 else:
-    uploaded_file = st.sidebar.file_uploader("Unggah File Video Rekaman", type=['mp4', 'avi', 'mov'])
+    uploaded_file = st.sidebar.file_uploader("Unggah File Video", type=['mp4', 'avi', 'mov'])
     if uploaded_file is not None:
         with open("temp_video.mp4", "wb") as f:
             f.write(uploaded_file.read())
         video_path = "temp_video.mp4"
 
-run_camera = st.sidebar.toggle("▶️ Mulai Sistem AI", value=False)
+run_camera = st.sidebar.toggle("Mulai Deteksi", value=False)
 
 # === FITUR EKSPOR LAPORAN EXCEL ===
 st.sidebar.markdown("---")
-st.sidebar.markdown('<div style="color:white; font-size:16px; font-weight:600; margin-bottom:10px;">📥 Ekspor Laporan</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div style="color:white; font-size:16px; font-weight:600; margin-bottom:10px;">Ekspor Laporan</div>', unsafe_allow_html=True)
 date_selection = st.sidebar.date_input("Pilih Rentang Tanggal:", value=[])
 
 show_preview = False
@@ -253,7 +253,7 @@ if len(date_selection) > 0:
         
         # 3. Menampilkan tombol unduh
         st.sidebar.download_button(
-            label="⬇️ Unduh Berkas Excel",
+            label="Unduh Laporan",
             data=excel_data,
             file_name=f"Laporan_KMP_{start_date}_sd_{end_date}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -261,14 +261,14 @@ if len(date_selection) > 0:
             type="primary"
         )
         
-        show_preview = st.sidebar.toggle("📊 Tampilkan Pratinjau Visual")
+        show_preview = st.sidebar.toggle("Tampilkan Visual Laporan")
     else:
         st.sidebar.warning("Tidak ada riwayat pada tanggal tersebut.")
 
 st.sidebar.markdown("---")
 
 # === PENGATURAN GARIS PINTU ===
-st.sidebar.subheader("🚪 Pengaturan Garis Pintu")
+st.sidebar.subheader("Pengaturan Garis Pintu")
 idx_orient = 0 if cfg["LINE_ORIENT"] == "Vertikal" else 1
 LINE_ORIENT = st.sidebar.selectbox("Orientasi Garis Pintu", ["Vertikal", "Horizontal"], index=idx_orient)
 
@@ -282,7 +282,7 @@ else:
     ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Atas ke Bawah", "Bawah ke Atas"], index=idx_dir)
 
 # === KONFIGURASI ZONA & WAKTU ===
-with st.sidebar.expander("🔲 Konfigurasi Zona & Waktu Tunggu", expanded=False):
+with st.sidebar.expander("Konfigurasi Kotak & Waktu Tunggu", expanded=False):
     st.markdown("**Durasi Konversi (Detik)**")
     STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, cfg["STAFF_LIMIT"]) 
     BUYER_LIMIT = st.slider("Waktu Tunggu Pembeli", 1, 60, cfg["BUYER_LIMIT"]) 
@@ -362,7 +362,7 @@ if show_preview and not df_export.empty:
 
 else:
     # MODE 2: DASHBOARD KAMERA UTAMA (Default)
-    st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLO11n (Tampilan Penuh)</div>', unsafe_allow_html=True)
+    st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung</div>', unsafe_allow_html=True)
     FRAME_WINDOW = st.empty()
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -411,7 +411,7 @@ else:
         else:
             st.info("Belum ada data jam ini.")
 
-        with st.expander("📋 Log Aktivitas Terkini", expanded=False):
+        with st.expander("Log Aktivitas Terkini", expanded=False):
             LOG_WINDOW = st.empty()
 
     with col_right:

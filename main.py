@@ -222,11 +222,11 @@ save_config(new_cfg)
 
 @st.cache_resource
 def load_model():
-    return YOLO('yolov8n.pt')
+    return YOLO('best.pt')
 model = load_model()
 
-# --- TATA LETAK 1: AREA VIDEO (DI POSISI PALING ATAS) ---
-st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLOv8n (Tampilan Penuh)</div>', unsafe_allow_html=True)
+
+st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLO11n (Tampilan Penuh)</div>', unsafe_allow_html=True)
 FRAME_WINDOW = st.empty()
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -242,7 +242,7 @@ def update_metrics_ui():
     c_buy = st.session_state.count_buyer
     c_out = st.session_state.count_out
     rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
-    occ = max(0, c_in - c_out) # Logika ini sekarang aman karena c_in tidak pernah dikurangi paksa
+    occ = max(0, c_in - c_out) 
     
     ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK HARI INI</div><div class="metric-value val-white">{c_in}</div><div class="metric-sub">Pembaruan langsung</div></div>', unsafe_allow_html=True)
     ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-teal">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)

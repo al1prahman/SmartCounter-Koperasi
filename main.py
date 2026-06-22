@@ -47,6 +47,7 @@ st.markdown("""
         display: flex; justify-content: space-between; align-items: center;
         background-color: #0A1628; padding: 10px 20px; border-bottom: 1px solid #1E4D8C;
         margin-top: -60px; margin-bottom: 20px; color: white; font-weight: 600;
+        border-radius: 8px;
     }
     .status-live { color: #00C9A7; display: flex; align-items: center; font-size: 14px;}
     .status-live span { height: 10px; width: 10px; background-color: #00C9A7; border-radius: 50%; display: inline-block; margin-right: 8px; box-shadow: 0 0 8px #00C9A7;}
@@ -59,7 +60,7 @@ st.markdown("""
     .metric-value { font-size: 36px; font-weight: 700; margin-bottom: 5px; }
     .val-white { color: #FFFFFF; }
     .val-teal { color: #00C9A7; }
-    .val-orange { color: #FF6B35; }
+    .val-pink { color: #D9568B; }
     .metric-sub { color: #718096; font-size: 12px; }
     
     .log-table { width: 100%; border-collapse: collapse; font-size: 13px; color: #A0AEC0;}
@@ -68,8 +69,11 @@ st.markdown("""
     .log-table tr:nth-child(even) { background-color: #0A1628; }
     .log-table tr:nth-child(odd) { background-color: #0F2040; }
     .badge-entry { background-color: rgba(0, 201, 167, 0.2); color: #00C9A7; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
-    .badge-buyer { background-color: rgba(255, 107, 53, 0.2); color: #FF6B35; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
+    .badge-buyer { background-color: rgba(217, 86, 139, 0.2); color: #D9568B; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
     .badge-staff { background-color: rgba(30, 77, 140, 0.4); color: #82B1FF; padding: 4px 8px; border-radius: 4px; font-size: 11px;}
+    
+    /* Custom Expander Styling */
+    .streamlit-expanderHeader { font-weight: 600 !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -172,7 +176,8 @@ else:
             f.write(uploaded_file.read())
         video_path = "temp_video.mp4"
 
-run_camera = st.sidebar.checkbox("▶️ Mulai Sistem AI", value=False)
+# MENGUBAH CHECKBOX MENJADI TOGGLE (TOMBOL SWITCH)
+run_camera = st.sidebar.toggle("▶️ Mulai Sistem AI", value=False)
 
 st.sidebar.markdown("---")
 
@@ -225,7 +230,6 @@ def load_model():
     return YOLO('best.pt')
 model = load_model()
 
-
 st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung Aktif — YOLO11n (Tampilan Penuh)</div>', unsafe_allow_html=True)
 FRAME_WINDOW = st.empty()
 st.markdown("<br>", unsafe_allow_html=True)
@@ -245,8 +249,8 @@ def update_metrics_ui():
     occ = max(0, c_in - c_out) 
     
     ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK HARI INI</div><div class="metric-value val-white">{c_in}</div><div class="metric-sub">Pembaruan langsung</div></div>', unsafe_allow_html=True)
-    ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-teal">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)
-    ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">TINGKAT KONVERSI</div><div class="metric-value val-orange">{rate}%</div><div class="metric-sub">Pengunjung → Pembeli</div></div>', unsafe_allow_html=True)
+    ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div><div class="metric-sub">Waktu tunggu terkonfirmasi</div></div>', unsafe_allow_html=True)
+    ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">TINGKAT KONVERSI</div><div class="metric-value val-teal">{rate}%</div><div class="metric-sub">Pengunjung → Pembeli</div></div>', unsafe_allow_html=True)
     ph_occ.markdown(f'<div class="metric-card"><div class="metric-title">PENGUNJUNG DI DALAM</div><div class="metric-value val-white">{occ}</div><div class="metric-sub">Di dalam toko saat ini</div></div>', unsafe_allow_html=True)
 
 update_metrics_ui()
@@ -259,31 +263,50 @@ with col_left:
     st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
     if not df_h.empty:
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=df_h['jam'].astype(str) + ':00', y=df_h['total'], mode='lines', name='Pengunjung', line=dict(color='#00C9A7', width=3, shape='spline'), fill='tozeroy', fillcolor='rgba(0, 201, 167, 0.1)'))
-        fig1.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0))
+        # MENGUBAH TAMPILAN GRAFIK MENJADI PINK KALEM & CLEAN SEPERTI GAMBAR
+        fig1.add_trace(go.Bar(
+            x=df_h['jam'].astype(str) + ':00', 
+            y=df_h['total'], 
+            marker_color='#D9568B', 
+            name='Pengunjung',
+            hovertemplate='<b>WAKTU %{x}</b><br>TOTAL %{y}<extra></extra>'
+        ))
+        fig1.update_layout(
+            height=280, 
+            paper_bgcolor='rgba(0,0,0,0)', 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            font_color='#A0AEC0', 
+            margin=dict(l=0, r=0, t=10, b=0),
+            bargap=0.05, # Merapatkan jarak antar bar seperti gambar
+            hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
+        )
         fig1.update_xaxes(showgrid=False, linecolor='#1E4D8C')
-        fig1.update_yaxes(showgrid=True, gridcolor='#1E4D8C', gridwidth=1, griddash='dash')
+        fig1.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1) # Grid lebih transparan
         st.plotly_chart(fig1, use_container_width=True)
     else:
         st.info("Belum ada data jam ini.")
 
-    st.markdown('<div style="color:white; font-weight:600; margin-top:15px; margin-bottom:10px;">Log Aktivitas Terkini</div>', unsafe_allow_html=True)
-    LOG_WINDOW = st.empty()
+    # MENGUBAH LOG MENJADI DROPDOWN (EXPANDER)
+    with st.expander("📋 Log Aktivitas Terkini", expanded=False):
+        LOG_WINDOW = st.empty()
 
 with col_right:
     st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Pengunjung vs Pembeli (7 Hari)</div>', unsafe_allow_html=True)
     if not df_d.empty:
         fig2 = go.Figure(data=[
             go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7', marker_line_width=0),
-            go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#FF6B35', marker_line_width=0)
+            go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B', marker_line_width=0)
         ])
-        fig2.update_layout(height=560, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+        fig2.update_layout(
+            height=560, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+            font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0), showlegend=False,
+            hoverlabel=dict(bgcolor="#1E293B", font_size=12, font_family="Inter", font_color="white")
+        )
         fig2.update_xaxes(showgrid=False, linecolor='#1E4D8C')
-        fig2.update_yaxes(showgrid=True, gridcolor='#1E4D8C', griddash='dash')
+        fig2.update_yaxes(showgrid=True, gridcolor='rgba(30, 77, 140, 0.3)', gridwidth=1)
         st.plotly_chart(fig2, use_container_width=True)
     else:
         st.info("Data historis tidak ditemukan.")
-
 
 # --- LOOP UTAMA KAMERA ---
 if run_camera and video_path is not None:
@@ -301,7 +324,6 @@ if run_camera and video_path is not None:
         
         frame_count += 1
         
-        # TEKNIK FRAME SKIPPING: Melewati setengah frame untuk menghilangkan LAG (FPS melesat)
         if frame_count % 2 == 0:
             continue
         
@@ -327,7 +349,6 @@ if run_camera and video_path is not None:
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
         cv2.putText(frame, "KASIR", (CASHIER_ZONE[0][0], CASHIER_ZONE[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (53, 107, 255), 1)
 
-        # AKURASI TINGGI: imgsz=640 dan ByteTrack agar pendeteksian tidak terputus
         results = model.track(frame, persist=True, classes=[0], verbose=False, conf=0.25, tracker="bytetrack.yaml", imgsz=640)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
@@ -341,7 +362,6 @@ if run_camera and video_path is not None:
                 is_staff = track_id in st.session_state.staff_ids
                 is_buyer = track_id in st.session_state.buyer_ids
                 
-                # LOGIKA STAFF LOCK ABSOLUT
                 if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff and not is_buyer:
                     if track_id not in st.session_state.staff_zone_timers:
                         st.session_state.staff_zone_timers[track_id] = time.time()
@@ -352,11 +372,9 @@ if run_camera and video_path is not None:
                             log_to_database(track_id, "Staf Aktif")
                             add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
                             is_staff = True
-                            # Catatan: Sengaja TIDAK MENGURANGI count_in agar data tetap stabil
                 elif track_id in st.session_state.staff_zone_timers:
                     del st.session_state.staff_zone_timers[track_id]
 
-                # PEMBELI & PENGUNJUNG (Hanya dieksekusi JIKA BUKAN STAFF)
                 if not is_staff:
                     if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
                         if track_id not in st.session_state.cashier_zone_timers:
@@ -432,7 +450,6 @@ if run_camera and video_path is not None:
                 cv2.rectangle(frame, (x1, y1-20), (x1+80, y1), color, -1)
                 cv2.putText(frame, f"ID:{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
 
-        # Optimasi UI: Memperbarui data teks setiap 5 siklus frame saja
         if frame_count % 5 == 0 or frame_count == 1:
             update_metrics_ui()
             LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
@@ -440,4 +457,6 @@ if run_camera and video_path is not None:
         FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
     cap.release()
 else:
-    LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
+    # Memastikan log tabel tetap terender meskipun kamera mati
+    with col_left:
+        LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)

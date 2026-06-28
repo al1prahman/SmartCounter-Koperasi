@@ -49,7 +49,7 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
         cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
 
-        # TRACKING DENGAN CPU
+        # TRACKING
         results = model.track(frame, persist=True, tracker="bytetrack.yaml", device='cpu', imgsz=320, verbose=False)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
@@ -59,27 +59,52 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
             for box, track_id in zip(boxes, ids):
                 x1, y1, x2, y2 = map(int, box)
                 cx, cy = (x1+x2)//2, (y1+y2)//2
-                
+                y_bawah = y2 
+
                 if track_id not in st.session_state.visitor_db:
-                    st.session_state.visitor_db[track_id] = {"status": "pengunjung", "pos_h": 'kiri' if cx < LINE_POS else 'kanan', "pos_v": 'atas' if cy < LINE_POS else 'bawah', "waktu_staf": None, "waktu_kasir": None, "terhitung_masuk": False}
+                    st.session_state.visitor_db[track_id] = {
+                        "status": "pengunjung", "pos_h": 'kiri' if cx < LINE_POS else 'kanan',
+                        "terhitung_masuk": False, "waktu_kasir": None, "waktu_staf": None
+                    }
                 
                 memori = st.session_state.visitor_db[track_id]
-                
-                # Logic Zone & Line (gunakan logika yang sudah kita buat sebelumnya)
-                # ... [Tempel logika zona dan garis yang sudah Anda tulis di sini] ...
 
-                # Pewarnaan Kotak
-                color = (53, 107, 255) if memori["status"] == "pembeli" else ((200, 100, 50) if memori["status"] == "staf" else (167, 201, 0))
+                # LOGIKA ZONA STAF & KASIR
+                if memori["status"] == "pengunjung":
+                    if cv2.pointPolygonTest(STAFF_ZONE, (cx, y_bawah), False) >= 0:
+                        memori["waktu_staf"] = (memori["waktu_staf"] or time.time())
+                        if time.time() - memori["waktu_staf"] >= STAFF_LIMIT:
+                            memori["status"] = "staf"
+                            add_log(track_id, "Staf Terdeteksi", "Zona Staf")
+                    elif cv2.pointPolygonTest(CASHIER_ZONE, (cx, y_bawah), False) >= 0:
+                        memori["waktu_kasir"] = (memori["waktu_kasir"] or time.time())
+                        if time.time() - memori["waktu_kasir"] >= BUYER_LIMIT:
+                            memori["status"] = "pembeli"
+                            st.session_state.count_buyer += 1
+                            log_to_database(track_id, "Pembeli Baru")
+                            add_log(track_id, "Pembeli Baru", "Kasir")
+                    else:
+                        memori["waktu_kasir"] = None; memori["waktu_staf"] = None
+
+                # LOGIKA GARIS PINTU
+                pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
+                if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan' and ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
+                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri' and ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
+                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                memori["pos_h"] = pos_sekarang
+
+                # PEWARNAAN
+                color = (0, 0, 255) if memori["status"] == "staf" else ((255, 0, 0) if memori["status"] == "pembeli" else (0, 255, 255))
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"#{track_id} {memori['status']}", (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+                cv2.putText(frame, f"ID:{track_id} {memori['status']}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        # UPDATE UI DENGAN KOMPRESI JPEG
+        # UPDATE UI
         if frame_count % 5 == 0:
             update_metrics_ui()
             LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
 
         success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        if success:
-            FRAME_WINDOW.image(buffer.tobytes(), use_container_width=True)
+        if success: FRAME_WINDOW.image(buffer.tobytes(), use_container_width=True)
     
     cap.release()

@@ -25,8 +25,8 @@ if 'initialized' not in st.session_state or st.session_state.get('current_date')
     st.session_state.update({
         'initialized': True, 'current_date': today_str,
         'count_in': tin, 'count_out': tout, 'count_buyer': tbuy,
-        'track_states': {}, 'staff_zone_timers': {}, 'cashier_zone_timers': {},
-        'staff_ids': set(), 'buyer_ids': set(), 'recent_logs': []
+        'visitor_db': {}, # SATU MEMORI TERPUSAT UNTUK SEMUA ID
+        'recent_logs': []
     })
 
 # --- SIDEBAR CONTROLS ---

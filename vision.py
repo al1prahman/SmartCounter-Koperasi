@@ -72,98 +72,101 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                 x1, y1, x2, y2 = map(int, box)
                 cx, cy = (x1+x2)//2, (y1+y2)//2
                 
-                is_staff = track_id in st.session_state.staff_ids
-                is_buyer = track_id in st.session_state.buyer_ids
+                # GUNAKAN TITIK KAKI UNTUK ZONA (Lebih Akurat)
+                y_bawah = y2 
                 
-                if cv2.pointPolygonTest(STAFF_ZONE, (cx, cy), False) >= 0 and not is_staff and not is_buyer:
-                    if track_id not in st.session_state.staff_zone_timers:
-                        st.session_state.staff_zone_timers[track_id] = time.time()
-                    else:
-                        elapsed = time.time() - st.session_state.staff_zone_timers[track_id]
-                        if elapsed >= STAFF_LIMIT:
-                            st.session_state.staff_ids.add(track_id)
-                            log_to_database(track_id, "Staf Aktif")
-                            add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
-                            is_staff = True
-                elif track_id in st.session_state.staff_zone_timers:
-                    del st.session_state.staff_zone_timers[track_id]
+                # 1. DAFTARKAN PENGUNJUNG BARU KE DALAM MEMORI
+                if track_id not in st.session_state.visitor_db:
+                    st.session_state.visitor_db[track_id] = {
+                        "status": "pengunjung",
+                        "pos_h": 'kiri' if cx < LINE_POS else 'kanan', # Posisi Vertikal
+                        "pos_v": 'atas' if cy < LINE_POS else 'bawah', # Posisi Horizontal
+                        "waktu_staf": None,
+                        "waktu_kasir": None,
+                        "terhitung_masuk": False
+                    }
+                
+                memori = st.session_state.visitor_db[track_id]
+                is_staff = (memori["status"] == "staf")
+                is_buyer = (memori["status"] == "pembeli")
 
-                if not is_staff:
-                    if cv2.pointPolygonTest(CASHIER_ZONE, (cx, cy), False) >= 0 and not is_buyer:
-                        if track_id not in st.session_state.cashier_zone_timers:
-                            st.session_state.cashier_zone_timers[track_id] = time.time()
+                # 2. LOGIKA ZONA STAF (Waktu Tunggu Konversi)
+                if not is_staff and not is_buyer:
+                    if cv2.pointPolygonTest(STAFF_ZONE, (cx, y_bawah), False) >= 0:
+                        if memori["waktu_staf"] is None:
+                            memori["waktu_staf"] = time.time()
                         else:
-                            elapsed = time.time() - st.session_state.cashier_zone_timers[track_id]
+                            elapsed = time.time() - memori["waktu_staf"]
+                            if elapsed >= STAFF_LIMIT:
+                                memori["status"] = "staf"
+                                is_staff = True
+                                log_to_database(track_id, "Staf Aktif")
+                                add_log(track_id, "Staf Terdeteksi", "Zona Staf", f"{int(elapsed)}s")
+                    else:
+                        memori["waktu_staf"] = None # Reset jika keluar zona
+
+                # 3. LOGIKA ZONA KASIR (Waktu Tunggu Konversi)
+                if not is_staff and not is_buyer:
+                    if cv2.pointPolygonTest(CASHIER_ZONE, (cx, y_bawah), False) >= 0:
+                        if memori["waktu_kasir"] is None:
+                            memori["waktu_kasir"] = time.time()
+                        else:
+                            elapsed = time.time() - memori["waktu_kasir"]
                             if elapsed >= BUYER_LIMIT:
-                                st.session_state.buyer_ids.add(track_id)
+                                memori["status"] = "pembeli"
+                                is_buyer = True
                                 st.session_state.count_buyer += 1
                                 log_to_database(track_id, "Pembeli Baru")
                                 add_log(track_id, "Pembeli Baru", "Kasir", f"{int(elapsed)}s")
-                    elif track_id in st.session_state.cashier_zone_timers:
-                        del st.session_state.cashier_zone_timers[track_id]
+                    else:
+                        memori["waktu_kasir"] = None
 
-                    # Logika Penyeberangan Garis Masuk / Keluar
-                    if LINE_ORIENT == "Vertikal":
-                        if track_id not in st.session_state.track_states:
-                            st.session_state.track_states[track_id] = 'kiri' if cx < LINE_POS else 'kanan'
-                        else:
-                            current_state = st.session_state.track_states[track_id]
-                            if current_state == 'kiri' and cx > LINE_POS + 15:
-                                if ENTRY_DIR == "Kiri ke Kanan":
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                else:
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'kanan'
-                            elif current_state == 'kanan' and cx < LINE_POS - 15:
-                                if ENTRY_DIR == "Kiri ke Kanan":
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                else:
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'kiri'
-                    else: # Horizontal
-                        if track_id not in st.session_state.track_states:
-                            st.session_state.track_states[track_id] = 'atas' if cy < LINE_POS else 'bawah'
-                        else:
-                            current_state = st.session_state.track_states[track_id]
-                            if current_state == 'atas' and cy > LINE_POS + 15:
-                                if ENTRY_DIR == "Atas ke Bawah":
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                else:
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'bawah'
-                            elif current_state == 'bawah' and cy < LINE_POS - 15:
-                                if ENTRY_DIR == "Atas ke Bawah":
-                                    st.session_state.count_out += 1
-                                    log_to_database(track_id, "Keluar")
-                                    add_log(track_id, "Keluar", "Pintu Utama")
-                                else:
-                                    st.session_state.count_in += 1
-                                    log_to_database(track_id, "Masuk")
-                                    add_log(track_id, "Masuk", "Pintu Utama")
-                                st.session_state.track_states[track_id] = 'atas'
+                # 4. LOGIKA GARIS PINTU (Tanpa Jeda Pixel/Buffer)
+                if LINE_ORIENT == "Vertikal":
+                    pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
+                    if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan':
+                        if ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
+                            st.session_state.count_in += 1
+                            memori["terhitung_masuk"] = True
+                            log_to_database(track_id, "Masuk")
+                            add_log(track_id, "Masuk", "Pintu")
+                        elif ENTRY_DIR == "Kanan ke Kiri":
+                            st.session_state.count_out += 1
+                    
+                    elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri':
+                        if ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
+                            st.session_state.count_in += 1
+                            memori["terhitung_masuk"] = True
+                            log_to_database(track_id, "Masuk")
+                            add_log(track_id, "Masuk", "Pintu")
+                        elif ENTRY_DIR == "Kiri ke Kanan":
+                            st.session_state.count_out += 1
+                    memori["pos_h"] = pos_sekarang
 
+                else: # Horizontal
+                    pos_sekarang = 'atas' if cy < LINE_POS else 'bawah'
+                    if memori["pos_v"] == 'atas' and pos_sekarang == 'bawah':
+                        if ENTRY_DIR == "Atas ke Bawah" and not memori["terhitung_masuk"]:
+                            st.session_state.count_in += 1
+                            memori["terhitung_masuk"] = True
+                            log_to_database(track_id, "Masuk")
+                            add_log(track_id, "Masuk", "Pintu")
+                        elif ENTRY_DIR == "Bawah ke Atas":
+                            st.session_state.count_out += 1
+                    
+                    elif memori["pos_v"] == 'bawah' and pos_sekarang == 'atas':
+                        if ENTRY_DIR == "Bawah ke Atas" and not memori["terhitung_masuk"]:
+                            st.session_state.count_in += 1
+                            memori["terhitung_masuk"] = True
+                            log_to_database(track_id, "Masuk")
+                            add_log(track_id, "Masuk", "Pintu")
+                        elif ENTRY_DIR == "Atas ke Bawah":
+                            st.session_state.count_out += 1
+                    memori["pos_v"] = pos_sekarang
+
+                # 5. PEWARNAAN KOTAK
                 color = (53, 107, 255) if is_buyer else ((200, 100, 50) if is_staff else (167, 201, 0))
                 label = "Pembeli" if is_buyer else ("Staf" if is_staff else "Pengunjung")
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 cv2.rectangle(frame, (x1, y1-20), (x1+80, y1), color, -1)
-                cv2.putText(frame, f"ID:{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
-
-        if frame_count % 5 == 0 or frame_count == 1:
-            update_metrics_ui()
-            LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)
-
-        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-    
-    cap.release()
+                cv2.putText(frame, f"#{track_id} {label}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1)

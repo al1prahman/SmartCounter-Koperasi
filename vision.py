@@ -14,16 +14,11 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
     model = load_model()
     cap = cv2.VideoCapture(video_path)
     
-    # Konfigurasi
     LINE_ORIENT = cfg["LINE_ORIENT"]
     LINE_POS = cfg["LINE_POS"]
     ENTRY_DIR = cfg["ENTRY_DIR"]
     STAFF_LIMIT = cfg["STAFF_LIMIT"]
     BUYER_LIMIT = cfg["BUYER_LIMIT"]
-    
-    # Pengaturan Pintu (Ganti angka ini sesuai koordinat pintu di video Anda)
-    PINTU_Y_START = 150 
-    PINTU_Y_END = 450
     
     STAFF_ZONE = np.array([[cfg["stf_x"], cfg["stf_y"]], [cfg["stf_x"]+cfg["stf_w"], cfg["stf_y"]], [cfg["stf_x"]+cfg["stf_w"], cfg["stf_y"]+cfg["stf_h"]], [cfg["stf_x"], cfg["stf_y"]+cfg["stf_h"]]], np.int32)
     CASHIER_ZONE = np.array([[cfg["ksr_x"], cfg["ksr_y"]], [cfg["ksr_x"]+cfg["ksr_w"], cfg["ksr_y"]], [cfg["ksr_x"]+cfg["ksr_w"], cfg["ksr_y"]+cfg["ksr_h"]], [cfg["ksr_x"], cfg["ksr_y"]+cfg["ksr_h"]]], np.int32)
@@ -40,6 +35,7 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
         frame_count += 1
         if frame_count % 2 == 0: continue
         
+        # Resize Canvas
         h_asli, w_asli = frame.shape[:2]
         scale = min(640 / w_asli, 480 / h_asli)
         frame_resized = cv2.resize(frame, (int(w_asli * scale), int(h_asli * scale)))
@@ -48,11 +44,12 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                (640-frame_resized.shape[1])//2 : (640+frame_resized.shape[1])//2] = frame_resized
         frame = canvas
 
-        # Drawing: Garis pintu hanya selebar area Pintu
-        cv2.line(frame, (LINE_POS, PINTU_Y_START), (LINE_POS, PINTU_Y_END), (30, 77, 140), 4)
+        # Drawing
+        cv2.line(frame, (LINE_POS, 0), (LINE_POS, 480), (30, 77, 140), 2) if LINE_ORIENT == "Vertikal" else cv2.line(frame, (0, LINE_POS), (640, LINE_POS), (30, 77, 140), 2)
         cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
 
+        # TRACKING
         results = model.track(frame, persist=True, tracker="bytetrack.yaml", device='cpu', imgsz=320, verbose=False)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
@@ -72,40 +69,37 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                 
                 memori = st.session_state.visitor_db[track_id]
 
-                # LOGIKA ZONA
+                # LOGIKA ZONA STAF & KASIR
                 if memori["status"] == "pengunjung":
                     if cv2.pointPolygonTest(STAFF_ZONE, (cx, y_bawah), False) >= 0:
                         memori["waktu_staf"] = (memori["waktu_staf"] or time.time())
                         if time.time() - memori["waktu_staf"] >= STAFF_LIMIT:
                             memori["status"] = "staf"
-                            st.session_state.count_in -= 1 # Staf dianggap keluar dari hitungan pengunjung
                             add_log(track_id, "Staf Terdeteksi", "Zona Staf")
                     elif cv2.pointPolygonTest(CASHIER_ZONE, (cx, y_bawah), False) >= 0:
                         memori["waktu_kasir"] = (memori["waktu_kasir"] or time.time())
                         if time.time() - memori["waktu_kasir"] >= BUYER_LIMIT:
                             memori["status"] = "pembeli"
                             st.session_state.count_buyer += 1
+                            log_to_database(track_id, "Pembeli Baru")
                             add_log(track_id, "Pembeli Baru", "Kasir")
                     else:
                         memori["waktu_kasir"] = None; memori["waktu_staf"] = None
 
-                # LOGIKA GARIS PINTU (Hanya jika posisi Y di antara PINTU_Y_START/END)
-                if PINTU_Y_START < y_bawah < PINTU_Y_END:
-                    pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
-                    if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan' and ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
-                        st.session_state.count_in += 1; memori["terhitung_masuk"] = True; add_log(track_id, "Masuk", "Pintu")
-                    elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri' and ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
-                        st.session_state.count_in += 1; memori["terhitung_masuk"] = True; add_log(track_id, "Masuk", "Pintu")
-                    memori["pos_h"] = pos_sekarang
+                # LOGIKA GARIS PINTU
+                pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
+                if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan' and ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
+                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri' and ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
+                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                memori["pos_h"] = pos_sekarang
 
-                # PEWARNAAN BARU (Hijau, Biru Staf, Orange Pembeli)
-                if memori["status"] == "staf": color, label = (255, 0, 0), "Staf"
-                elif memori["status"] == "pembeli": color, label = (0, 165, 255), "Pembeli"
-                else: color, label = (0, 255, 0), "Pengunjung"
-                
+                # PEWARNAAN
+                color = (0, 0, 255) if memori["status"] == "staf" else ((255, 0, 0) if memori["status"] == "pembeli" else (0, 255, 255))
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"ID:{track_id} {label}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                cv2.putText(frame, f"ID:{track_id} {memori['status']}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
+        # UPDATE UI
         if frame_count % 5 == 0:
             update_metrics_ui()
             LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)

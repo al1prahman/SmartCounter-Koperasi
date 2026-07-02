@@ -1,1 +1,1 @@
-{"LINE_ORIENT": "Horizontal", "LINE_POS": 211, "ENTRY_DIR": "Bawah ke Atas", "PINTU_Y_START": 447, "PINTU_Y_END": 499, "STAFF_LIMIT": 13, "BUYER_LIMIT": 15, "stf_x": 113, "stf_y": 155, "stf_w": 63, "stf_h": 116, "ksr_x": 185, "ksr_y": 157, "ksr_w": 69, "ksr_h": 122}
+{"LINE_ORIENT": "Vertikal", "LINE_POS": 284, "ENTRY_DIR": "Kanan ke Kiri", "PINTU_Y_START": 96, "PINTU_Y_END": 246, "STAFF_LIMIT": 13, "BUYER_LIMIT": 15, "stf_x": 113, "stf_y": 155, "stf_w": 63, "stf_h": 116, "ksr_x": 185, "ksr_y": 157, "ksr_w": 69, "ksr_h": 122}

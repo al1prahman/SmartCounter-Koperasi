@@ -94,12 +94,21 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Pengaturan Garis Pintu")
 idx_orient = 0 if cfg["LINE_ORIENT"] == "Vertikal" else 1
 LINE_ORIENT = st.sidebar.selectbox("Orientasi Garis Pintu", ["Vertikal", "Horizontal"], index=idx_orient)
+
 if LINE_ORIENT == "Vertikal":
     LINE_POS = st.sidebar.slider("Posisi Koordinat (X)", 0, 640, cfg["LINE_POS"])
     ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Kiri ke Kanan", "Kanan ke Kiri"], index=0 if cfg["ENTRY_DIR"] == "Kiri ke Kanan" else 1)
+    
+    # PERBAIKAN: Slider panjang garis vertikal (Rentang tinggi Y)
+    PINTU_Y_START = st.sidebar.slider("Batas Atas Garis (Y Start)", 0, 480, cfg.get("PINTU_Y_START", 150))
+    PINTU_Y_END = st.sidebar.slider("Batas Bawah Garis (Y End)", 0, 480, cfg.get("PINTU_Y_END", 450))
 else:
     LINE_POS = st.sidebar.slider("Posisi Koordinat (Y)", 0, 480, cfg["LINE_POS"])
     ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Atas ke Bawah", "Bawah ke Atas"], index=0 if cfg["ENTRY_DIR"] == "Atas ke Bawah" else 1)
+    
+    # PERBAIKAN: Slider panjang garis horizontal (Rentang lebar X)
+    PINTU_Y_START = st.sidebar.slider("Batas Kiri Garis (X Start)", 0, 640, cfg.get("PINTU_Y_START", 150))
+    PINTU_Y_END = st.sidebar.slider("Batas Kanan Garis (X End)", 0, 640, cfg.get("PINTU_Y_END", 450))
 
 with st.sidebar.expander("Konfigurasi Kotak & Waktu Tunggu", expanded=False):
     STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, cfg["STAFF_LIMIT"]) 
@@ -114,8 +123,10 @@ with st.sidebar.expander("Konfigurasi Kotak & Waktu Tunggu", expanded=False):
     ksr_w = st.slider("Kasir: Lebar", 50, 640, cfg["ksr_w"])
     ksr_h = st.slider("Kasir: Tinggi", 50, 480, cfg["ksr_h"])
 
+# Memasukkan PINTU_Y_START dan PINTU_Y_END ke dalam dictionary agar terbaca di vision.py
 new_cfg = {
     "LINE_ORIENT": LINE_ORIENT, "LINE_POS": LINE_POS, "ENTRY_DIR": ENTRY_DIR,
+    "PINTU_Y_START": PINTU_Y_START, "PINTU_Y_END": PINTU_Y_END,
     "STAFF_LIMIT": STAFF_LIMIT, "BUYER_LIMIT": BUYER_LIMIT,
     "stf_x": stf_x, "stf_y": stf_y, "stf_w": stf_w, "stf_h": stf_h,
     "ksr_x": ksr_x, "ksr_y": ksr_y, "ksr_w": ksr_w, "ksr_h": ksr_h

@@ -1,1 +1,1 @@
-{"LINE_ORIENT": "Vertikal", "LINE_POS": 391, "ENTRY_DIR": "Kanan ke Kiri", "STAFF_LIMIT": 13, "BUYER_LIMIT": 15, "stf_x": 113, "stf_y": 155, "stf_w": 63, "stf_h": 116, "ksr_x": 185, "ksr_y": 157, "ksr_w": 69, "ksr_h": 122}
+{"LINE_ORIENT": "Vertikal", "LINE_POS": 391, "ENTRY_DIR": "Kanan ke Kiri", "PINTU_Y_START": 150, "PINTU_Y_END": 450, "STAFF_LIMIT": 13, "BUYER_LIMIT": 15, "stf_x": 113, "stf_y": 155, "stf_w": 63, "stf_h": 116, "ksr_x": 185, "ksr_y": 157, "ksr_w": 69, "ksr_h": 122}

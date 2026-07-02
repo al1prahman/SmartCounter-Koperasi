@@ -59,8 +59,8 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
         cv2.putText(frame, "Zona Kasir", (cfg["ksr_x"], cfg["ksr_y"] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (53, 107, 255), 2)
 
-        # TRACKING
-        results = model.track(frame, persist=True, tracker="bytetrack.yaml", device='cpu', imgsz=320, verbose=False)
+        # --- PERBAIKAN 1 & 2: Menggunakan BotSORT dan conf=0.25 ---
+        results = model.track(frame, persist=True, tracker="botsort.yaml", device='cpu', imgsz=320, conf=0.25, verbose=False)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -71,11 +71,18 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                 cx, cy = (x1+x2)//2, (y1+y2)//2
                 y_bawah = y2 
 
-                # INISIALISASI MEMORI DINAMIS
+                # --- PERBAIKAN 3: INISIALISASI MEMORI DINAMIS (Anti-Bocor) ---
                 if track_id not in st.session_state.visitor_db:
                     posisi_awal = ('kiri' if cx < LINE_POS else 'kanan') if LINE_ORIENT == "Vertikal" else ('atas' if cy < LINE_POS else 'bawah')
+                    
+                    # LOGIKA BYPASS: Jika ID baru sempat terputus dan muncul lagi tepat di dalam zona staf, 
+                    # langsung jadikan staf tanpa perlu menunggu timer.
+                    status_awal = "pengunjung"
+                    if cv2.pointPolygonTest(STAFF_ZONE, (cx, y_bawah), False) >= 0:
+                        status_awal = "staf"
+                        
                     st.session_state.visitor_db[track_id] = {
-                        "status": "pengunjung", "pos": posisi_awal,
+                        "status": status_awal, "pos": posisi_awal,
                         "terhitung_masuk": False, "waktu_kasir": None, "waktu_staf": None
                     }
                 

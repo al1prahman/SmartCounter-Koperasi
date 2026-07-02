@@ -20,6 +20,11 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
     STAFF_LIMIT = cfg["STAFF_LIMIT"]
     BUYER_LIMIT = cfg["BUYER_LIMIT"]
     
+    # --- PENGATURAN BATAS PINTU ---
+    # Sesuaikan angka Y ini agar pas dengan tinggi pintu di kamera Anda
+    PINTU_Y_START = 150 
+    PINTU_Y_END = 450
+    
     STAFF_ZONE = np.array([[cfg["stf_x"], cfg["stf_y"]], [cfg["stf_x"]+cfg["stf_w"], cfg["stf_y"]], [cfg["stf_x"]+cfg["stf_w"], cfg["stf_y"]+cfg["stf_h"]], [cfg["stf_x"], cfg["stf_y"]+cfg["stf_h"]]], np.int32)
     CASHIER_ZONE = np.array([[cfg["ksr_x"], cfg["ksr_y"]], [cfg["ksr_x"]+cfg["ksr_w"], cfg["ksr_y"]], [cfg["ksr_x"]+cfg["ksr_w"], cfg["ksr_y"]+cfg["ksr_h"]], [cfg["ksr_x"], cfg["ksr_y"]+cfg["ksr_h"]]], np.int32)
 
@@ -44,10 +49,18 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                (640-frame_resized.shape[1])//2 : (640+frame_resized.shape[1])//2] = frame_resized
         frame = canvas
 
-        # Drawing
-        cv2.line(frame, (LINE_POS, 0), (LINE_POS, 480), (30, 77, 140), 2) if LINE_ORIENT == "Vertikal" else cv2.line(frame, (0, LINE_POS), (640, LINE_POS), (30, 77, 140), 2)
+        # Drawing Garis & Zona
+        if LINE_ORIENT == "Vertikal":
+            cv2.line(frame, (LINE_POS, PINTU_Y_START), (LINE_POS, PINTU_Y_END), (30, 77, 140), 4)
+        else:
+            cv2.line(frame, (PINTU_Y_START, LINE_POS), (PINTU_Y_END, LINE_POS), (30, 77, 140), 4)
+
         cv2.polylines(frame, [STAFF_ZONE], True, (200, 100, 50), 2)
+        cv2.putText(frame, "Zona Staf", (cfg["stf_x"], cfg["stf_y"] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 100, 50), 2)
+
         cv2.polylines(frame, [CASHIER_ZONE], True, (53, 107, 255), 2)
+        cv2.putText(frame, "Zona Kasir", (cfg["ksr_x"], cfg["ksr_y"] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (53, 107, 255), 2)
+
 
         # TRACKING
         results = model.track(frame, persist=True, tracker="bytetrack.yaml", device='cpu', imgsz=320, verbose=False)
@@ -75,6 +88,9 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                         memori["waktu_staf"] = (memori["waktu_staf"] or time.time())
                         if time.time() - memori["waktu_staf"] >= STAFF_LIMIT:
                             memori["status"] = "staf"
+                            # Jika dia awalnya terhitung masuk sebagai pengunjung, kurangi angkanya
+                            if memori["terhitung_masuk"]:
+                                st.session_state.count_in -= 1 
                             add_log(track_id, "Staf Terdeteksi", "Zona Staf")
                     elif cv2.pointPolygonTest(CASHIER_ZONE, (cx, y_bawah), False) >= 0:
                         memori["waktu_kasir"] = (memori["waktu_kasir"] or time.time())
@@ -86,18 +102,31 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                     else:
                         memori["waktu_kasir"] = None; memori["waktu_staf"] = None
 
-                # LOGIKA GARIS PINTU
-                pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
-                if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan' and ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
-                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
-                elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri' and ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
-                    st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
-                memori["pos_h"] = pos_sekarang
+                # LOGIKA GARIS PINTU (Terpotong)
+                if PINTU_Y_START <= y_bawah <= PINTU_Y_END:
+                    pos_sekarang = 'kiri' if cx < LINE_POS else 'kanan'
+                    if memori["pos_h"] == 'kiri' and pos_sekarang == 'kanan' and ENTRY_DIR == "Kiri ke Kanan" and not memori["terhitung_masuk"]:
+                        st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                    elif memori["pos_h"] == 'kanan' and pos_sekarang == 'kiri' and ENTRY_DIR == "Kanan ke Kiri" and not memori["terhitung_masuk"]:
+                        st.session_state.count_in += 1; memori["terhitung_masuk"] = True; log_to_database(track_id, "Masuk"); add_log(track_id, "Masuk", "Pintu")
+                    memori["pos_h"] = pos_sekarang
+                else:
+                    # Update posisi horizontal jika di luar pintu agar memori arah jalan tidak tersangkut
+                    memori["pos_h"] = 'kiri' if cx < LINE_POS else 'kanan'
 
-                # PEWARNAAN
-                color = (0, 0, 255) if memori["status"] == "staf" else ((255, 0, 0) if memori["status"] == "pembeli" else (0, 255, 255))
+                # PEWARNAAN BARU
+                if memori["status"] == "staf":
+                    color = (255, 0, 0) # Biru (OpenCV menggunakan format BGR)
+                    label = "Staf"
+                elif memori["status"] == "pembeli":
+                    color = (0, 165, 255) # Oranye
+                    label = "Pembeli"
+                else:
+                    color = (0, 255, 0) # Hijau
+                    label = "Pengunjung"
+
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"ID:{track_id} {memori['status']}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                cv2.putText(frame, f"ID:{track_id} {label}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # UPDATE UI
         if frame_count % 5 == 0:

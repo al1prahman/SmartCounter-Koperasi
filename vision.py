@@ -8,7 +8,7 @@ from ui_styles import render_log_table
 
 @st.cache_resource
 def load_model():
-    return YOLO('best.pt')
+    return YOLO('best-YOLO11n.pt')
 
 def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui):
     model = load_model()

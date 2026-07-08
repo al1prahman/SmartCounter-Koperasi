@@ -60,7 +60,7 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
         cv2.putText(frame, "Zona Kasir", (cfg["ksr_x"], cfg["ksr_y"] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (53, 107, 255), 2)
 
         # --- PERBAIKAN 1 & 2: Menggunakan BotSORT dan conf=0.25 ---
-        results = model.track(frame, persist=True, tracker="botsort.yaml", device='cpu', imgsz=320, conf=0.25, verbose=False)
+        results = model.track(frame, persist=True, tracker="botsort.yaml", device='cpu', imgsz=640, conf=0.15, verbose=False)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()

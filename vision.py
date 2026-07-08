@@ -60,7 +60,7 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
         cv2.putText(frame, "Zona Kasir", (cfg["ksr_x"], cfg["ksr_y"] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (53, 107, 255), 2)
 
         # --- PERBAIKAN 1 & 2: Menggunakan BotSORT dan conf=0.25 ---
-        results = model.track(frame, persist=True, tracker="botsort.yaml", device='cpu', imgsz=640, conf=0.55, verbose=False)
+        results = model.track(frame, persist=True, tracker="botsort.yaml", device='cpu', imgsz=640, conf=0.65, verbose=False)
         
         if results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -68,15 +68,6 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
 
             for box, track_id in zip(boxes, ids):
                 x1, y1, x2, y2 = map(int, box)
-                
-                lebar = x2 - x1
-                tinggi = y2 - y1
-                
-                
-                if lebar < 50 or tinggi < 100:
-                    continue 
-                
-
                 cx, cy = (x1+x2)//2, (y1+y2)//2
                 y_bawah = y2 
 

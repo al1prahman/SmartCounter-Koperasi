@@ -138,6 +138,9 @@ def run_camera_loop(video_path, cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui
                 else:
                     color, label = (0, 255, 0), "Pengunjung"
 
+                text_y = y1 - 5 if y1 > 15 else y1 + 15
+                text_x = x1 if x1 > 0 else 5
+
                 # PENYESUAIAN FONT LABEL PENGUNJUNG (Scale 0.4, Thickness 1)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(frame, f"ID:{track_id} {label}", (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)

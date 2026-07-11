@@ -48,3 +48,12 @@ Sistem ini dieksekusi secara lokal (*Edge Computing*) dan membutuhkan spesifikas
 Unduh (Download ZIP) atau *clone* direktori proyek ini ke komputer Anda, lalu buka terminal (atau *Command Prompt/PowerShell* pada Windows) dan arahkan ke folder proyek tersebut:
 ```bash
 cd path/ke/folder/SmartCounter-Koperasi
+
+**2. Buat Virtual Environment**
+python -m venv venv
+
+# Aktifkan di Windows:
+venv\Scripts\activate
+
+# Aktifkan di Mac/Linux:
+source venv/bin/activate

@@ -60,3 +60,6 @@ source venv/bin/activate
 
 **3. Install Dependensi Sistem**
 pip install ultralytics opencv-python streamlit numpy
+
+**4. Siapkan Model AI
+Sistem menggunakan model bawaan YOLO11. Saat Anda menjalankan program untuk pertama kalinya, library Ultralytics secara otomatis akan mengunduh file yolo11n.pt (ukuran sangat ringan, ~5MB) ke dalam direktori Anda.

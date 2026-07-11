@@ -44,12 +44,12 @@ Sistem ini dieksekusi secara lokal (*Edge Computing*) dan membutuhkan spesifikas
 
 ## 🚀 Cara Setup dan Instalasi
 
-**1. Persiapkan Repositori Proyek**
-Unduh (Download ZIP) atau *clone* direktori proyek ini ke komputer Anda, lalu buka terminal (atau *Command Prompt/PowerShell* pada Windows) dan arahkan ke folder proyek tersebut:
+**1. Persiapkan Repositori Proyek** Unduh (Download ZIP) atau *clone* direktori proyek ini ke komputer Anda, lalu buka terminal (atau *Command Prompt/PowerShell* pada Windows) dan arahkan ke folder proyek tersebut:
 ```bash
 cd path/ke/folder/SmartCounter-Koperasi
+2. Buat dan Aktifkan Virtual Environment Sangat disarankan menggunakan virtual environment agar library tidak bentrok dengan proyek lain di laptop Anda:
 
-**2. Buat Virtual Environment**
+Bash
 python -m venv venv
 
 # Aktifkan di Windows:
@@ -57,12 +57,13 @@ venv\Scripts\activate
 
 # Aktifkan di Mac/Linux:
 source venv/bin/activate
+3. Install Dependensi Sistem Pastikan internet Anda menyala, lalu instal semua kebutuhan library melalui perintah berikut:
 
-**3. Install Dependensi Sistem**
+Bash
 pip install ultralytics opencv-python streamlit numpy
+4. Siapkan Model AI Sistem menggunakan model bawaan YOLO11. Anda tidak perlu repot mencari modelnya, karena saat Anda menjalankan program untuk pertama kalinya, library Ultralytics secara otomatis akan mengunduh file yolo11n.pt (ukuran sangat ringan, ~5MB) langsung ke dalam direktori Anda.
 
-**4. Siapkan Model AI
-Sistem menggunakan model bawaan YOLO11. Saat Anda menjalankan program untuk pertama kalinya, library Ultralytics secara otomatis akan mengunduh file yolo11n.pt (ukuran sangat ringan, ~5MB) ke dalam direktori Anda.
+5. Jalankan Sistem Setelah semua siap, jalankan antarmuka dashboard Streamlit dengan perintah:
 
-**5. Jalankan sistem**
-streamlit run main.py 
+Bash
+streamlit run main.py

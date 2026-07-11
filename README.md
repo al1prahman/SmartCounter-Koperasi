@@ -63,3 +63,6 @@ pip install ultralytics opencv-python streamlit numpy
 
 **4. Siapkan Model AI
 Sistem menggunakan model bawaan YOLO11. Saat Anda menjalankan program untuk pertama kalinya, library Ultralytics secara otomatis akan mengunduh file yolo11n.pt (ukuran sangat ringan, ~5MB) ke dalam direktori Anda.
+
+**5. Jalankan sistem**
+streamlit run main.py 

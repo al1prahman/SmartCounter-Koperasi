@@ -7,13 +7,18 @@ Klasifikasi ini murni berbasis analisis *Dwell Time* (durasi berdiri) pada *Regi
 
 ---
 
-## 📌 Spesifikasi & Fitur Utama
-Sistem ini terdiri dari dua modul utama: **AI Camera Processing** (Python) dan **Web Dashboard** (Laravel 12).
-
-1. **Visitor Counting (In/Out):** Menggunakan garis virtual vertikal untuk menghitung total pengunjung masuk (kiri ke kanan) dan keluar (kanan ke kiri) dengan zona toleransi anti *double-counting*.
-2. **Staff Filtering (Geofencing):** Mendeteksi dan mengabaikan staf koperasi dari hitungan pengunjung jika mereka berada di dalam "Zona Staf" selama lebih dari 30 detik (*dwell-time analysis*).
-3. **Buyer Estimation (ROI Cashier):** Menganalisis *dwell-time* pengunjung di "Zona Kasir". Jika pengunjung mengantre lebih dari 20 detik secara berturut-turut, sistem otomatis mengonversi status mereka menjadi "Pembeli".
-4. **Real-time Database Logging:** Mencatat setiap kejadian lalu lintas dan transaksi ke dalam MySQL (sedang dikembangkan).
+### ✨ Spesifikasi dan Fitur Utama
+1. **Deteksi Objek Real-Time:** Menggunakan model pre-trained YOLO11 yang dikalibrasi untuk mengenali manusia (Person/Class 0) secara presisi pada sudut pandang CCTV minimarket.
+2. **Pelacakan ID Presisi Tinggi (BotSORT):** Mengimplementasikan tracker BotSORT yang dilengkapi dengan sistem memori dinamis (anti-bocor) untuk mempertahankan ID pelacakan meskipun objek saling tumpang tindih (*occlusion*).
+3. **Penghitung Garis Masuk/Keluar Virtual:** Algoritma persilangan vektor berdasarkan pusat koordinat tubuh (*centroid*). Mendukung fleksibilitas orientasi garis (Vertikal maupun Horizontal) dan arah masuk yang dapat dikonfigurasi.
+4. **Klasifikasi Berbasis Spasial & Waktu (*Dwell Time*):**
+   - 🟩 **Pengunjung:** Objek terdeteksi di area umum (Default).
+   - 🟧 **Pembeli:** Objek berada di dalam **Zona Kasir** melebihi batas waktu toleransi.
+   - 🟦 **Staf:** Objek berada di dalam **Zona Staf** melebihi batas waktu toleransi.
+5. **Dashboard Interaktif Berbasis Web (Streamlit):** Pengguna dapat mengatur kalibrasi *Region of Interest* (ROI), posisi garis batas, batas waktu (*limit timer*), dan memonitor CCTV beserta matriks data secara langsung tanpa perlu mengubah kode inti.
+6. **Smart UI Bounding Box:**
+   Dilengkapi logika pengaman (*clamping*) agar teks ID/Label pengunjung tidak terpotong atau menghilang saat pengunjung berada di ujung/tepi batas frame kamera.
+7. **Database Logging Automatis:** Mencatat seluruh riwayat aktivitas (Masuk/Keluar, Pembeli Baru, Staf Terdeteksi) ke dalam *Database* (SQLite) yang dirender otomatis sebagai tabel di *dashboard*.
 
 ---
 

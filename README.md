@@ -57,3 +57,6 @@ venv\Scripts\activate
 
 # Aktifkan di Mac/Linux:
 source venv/bin/activate
+
+**3. Install Dependensi Sistem**
+pip install ultralytics opencv-python streamlit numpy

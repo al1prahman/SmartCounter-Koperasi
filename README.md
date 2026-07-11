@@ -1,6 +1,11 @@
-# Smart Counter Koperasi Merah Putih 🛒🤖
+# 🛒 Smart Counter & Dwell Time Analysis - Koperasi Merah Putih
 
-Sistem Cerdas Penghitung Pengunjung dan Estimasi Konversi Pembeli Berbasis Computer Vision. Sistem ini dikembangkan untuk mengotomatisasi pemantauan lalu lintas pengunjung dan menghitung rasio konversi pembeli secara *real-time* di Koperasi Merah Putih menggunakan teknologi AI (YOLOv8).
+## 📖 Deskripsi Singkat
+**Sistem Smart Counter dan Analisis Dwell Time** adalah aplikasi berbasis *Computer Vision* yang terintegrasi dengan kamera pengawas (CCTV) untuk melacak dan mengklasifikasikan entitas manusia secara otomatis. Menggunakan algoritma **YOLO11** dan pelacak **BotSORT**, sistem ini mampu menghitung jumlah pengunjung keluar-masuk serta mengklasifikasikan mereka menjadi **Pengunjung**, **Pembeli**, dan **Staf** secara *real-time*. 
+
+Klasifikasi ini murni berbasis analisis *Dwell Time* (durasi berdiri) pada *Region of Interest* (ROI) yang dapat diatur secara dinamis, sehingga sistem bekerja efisien tanpa memerlukan pengenalan wajah (*Facial Recognition*) maupun identifikasi seragam.
+
+---
 
 ## 📌 Spesifikasi & Fitur Utama
 Sistem ini terdiri dari dua modul utama: **AI Camera Processing** (Python) dan **Web Dashboard** (Laravel 12).

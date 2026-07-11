@@ -22,19 +22,23 @@ Klasifikasi ini murni berbasis analisis *Dwell Time* (durasi berdiri) pada *Regi
 
 ---
 
-## 💻 Requirements (Kebutuhan Sistem)
+## 💻 Persyaratan Sistem (*Requirements*)
+Sistem ini dieksekusi secara lokal (*Edge Computing*) dan membutuhkan spesifikasi dasar sebagai berikut:
 
-**Software:**
-*   **Python:** Versi 3.11.x (Penting: Jangan gunakan versi 3.12+ agar kompatibel dengan library *Machine Learning*).
-*   **XAMPP:** Dengan PHP 8.2+ dan MySQL.
-*   **Node.js & npm:** Versi terbaru untuk aset *frontend*.
-*   **Composer:** Untuk manajemen dependensi PHP/Laravel.
-*   **Git:** Untuk *version control*.
+**Perangkat Keras (*Hardware*):**
+- CPU: Prosesor modern (Core i3/Ryzen 3 ke atas).
+- GPU (Opsional): Disarankan menggunakan NVIDIA GPU (mendukung CUDA) untuk mendapatkan FPS (*framerate*) maksimum.
+- RAM: Minimal 4 GB.
 
-**Hardware Minimum:**
-*   Prosesor minimum Intel Core i3/i5 generasi ke-8 atau setara (disarankan yang mendukung AVX2).
-*   RAM 8 GB (16 GB sangat disarankan).
-*   Webcam internal laptop atau CCTV eksternal (Resolusi HD 720p).
+**Perangkat Lunak (*Software*):**
+- OS: Windows 10/11, macOS, atau Linux.
+- Python: Versi 3.9, 3.10, 3.11, atau 3.12.
+
+**Dependensi Library Utama:**
+- `ultralytics` (YOLO11 Engine)
+- `opencv-python` (Computer Vision & Geometry Logic)
+- `streamlit` (Web Dashboard & UI)
+- `numpy` (Matriks Komputasi)
 
 ---
 

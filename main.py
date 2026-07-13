@@ -167,13 +167,13 @@ else:
     with col_left:
         st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung</div>', unsafe_allow_html=True)
         
-        # LOGIKA PENGUNCI RUANG PREVIEW VIDEO (Fix Placeholder via Shadow Container)
+        # PERBAIKAN: Tinggi video preview diperpanjang dari 410px ke 450px agar seimbang dengan tumpukan kartu
         if not run_camera:
             st.markdown(
                 """
                 <div style="
                     width: 100%;
-                    height: 410px;
+                    height: 450px;
                     background-color: #1E293B;
                     border-radius: 12px;
                     box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.6);
@@ -193,7 +193,7 @@ else:
             
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # JUDUL DAN GRAFIK JAM DIKUNCI MATI DI BAWAH PREVIEW VIDEO
+        # Grafik Jam Terkunci Konsisten di Bawah Area Video
         st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
         df_h, df_d = get_chart_data()
         if not df_h.empty:
@@ -205,31 +205,32 @@ else:
             LOG_WINDOW = st.empty()
 
     with col_right:
-        # --- RINGKASAN METRIK DI SEBELAH KANAN VIDEO (BERTUMPUK) ---
         st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📊 Ringkasan Metrik</div>', unsafe_allow_html=True)
         
-        # PERBAIKAN: Menghapus "Pengunjung di Dalam", tersisa 3 kolom metrik seimbang
-        m1, m2, m3 = st.columns(3)
-        ph_in, ph_buy, ph_rate = m1.empty(), m2.empty(), m3.empty()
+        # PERBAIKAN UTAMA: Menghapus sub-columns (m1,m2,m3). 
+        # Card sekarang diposisikan langsung bertumpuk secara vertikal (Full-Width & Konsisten)
+        ph_in = st.empty()
+        ph_buy = st.empty()
+        ph_rate = st.empty()
 
         def update_metrics_ui():
             c_in, c_buy, c_out = st.session_state.count_in, st.session_state.count_buyer, st.session_state.count_out
             rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
-            ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK</div><div class="metric-value val-white">{c_in}</div></div>', unsafe_allow_html=True)
-            ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div></div>', unsafe_allow_html=True)
-            ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">KONVERSI</div><div class="metric-value val-teal">{rate}%</div></div>', unsafe_allow_html=True)
+            ph_in.markdown(f'<div class="metric-card" style="margin-bottom: 10px;"><div class="metric-title">TOTAL MASUK</div><div class="metric-value val-white">{c_in}</div></div>', unsafe_allow_html=True)
+            ph_buy.markdown(f'<div class="metric-card" style="margin-bottom: 10px;"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div></div>', unsafe_allow_html=True)
+            ph_rate.markdown(f'<div class="metric-card" style="margin-bottom: 10px;"><div class="metric-title">KONVERSI KOPERASI</div><div class="metric-value val-teal">{rate}%</div></div>', unsafe_allow_html=True)
 
         update_metrics_ui()
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # GRAFIK 7 HARI IKUT BERTUMPUK DI SEBELAH KANAN VIDEO
+        # Grafik Mingguan Ikut Menyesuaikan di Samping Bawah
         st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Pengunjung vs Pembeli (7 Hari)</div>', unsafe_allow_html=True)
         if not df_d.empty:
             fig2 = go.Figure(data=[
                 go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7'), 
                 go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B')
             ])
-            fig2.update_layout(height=415, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', showlegend=False, margin=dict(l=0, r=0, t=10, b=0))
+            fig2.update_layout(height=315, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', showlegend=False, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig2, use_container_width=True)
 
     # --- JALANKAN LOGIKA KAMERA VIA VISION.PY ---

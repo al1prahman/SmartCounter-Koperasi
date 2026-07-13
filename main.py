@@ -130,9 +130,8 @@ new_cfg = {
 }
 save_config(new_cfg)
 
-
 # ==========================================
-# RENDER UTAMA (PREVIEW / DASHBOARD TATA LETAK BARU)
+# RENDER UTAMA (PREVIEW / DASHBOARD)
 # ==========================================
 if show_preview and not df_export.empty:
     st.markdown('<div class="metric-card"><div style="color:white; font-weight:600; font-size:20px; margin-bottom:10px;">📊 Pratinjau Laporan (Visualisasi Ekspor CSV)</div>', unsafe_allow_html=True)
@@ -162,65 +161,79 @@ if show_preview and not df_export.empty:
     st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # --- PEMBAGIAN KOLOM YOUTUBE-STYLE ---
-    # Kolom Kiri 65% (Video Utama), Kolom Kanan 35% (Panel Metrik & Chat/Log)
-    col_vid, col_panel = st.columns([6.5, 3.5])
+    # --- PEMBAGIAN KOLOM UTAMA (DASHBOARD YOUTUBE-STYLE) ---
+    col_left, col_right = st.columns([6.5, 3.5])
 
-    # KONTEN KOLOM KIRI (VIDEO & GRAFIK JAM)
-    with col_vid:
-        st.markdown('<div style="color:white; font-weight:600; font-size:18px; margin-bottom:10px;">📹 Tayangan Langsung (Live View)</div>', unsafe_allow_html=True)
-        FRAME_WINDOW = st.empty()
+    with col_left:
+        st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung</div>', unsafe_allow_html=True)
+        
+        # LOGIKA PENGUNCI RUANG PREVIEW VIDEO (Fix Placeholder via Shadow Container)
+        if not run_camera:
+            st.markdown(
+                """
+                <div style="
+                    width: 100%;
+                    height: 410px;
+                    background-color: #1E293B;
+                    border-radius: 12px;
+                    box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.6);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border: 1px solid rgba(255,255,255,0.05);
+                ">
+                    <span style="color: #64748B; font-size: 16px; font-weight: 500; letter-spacing: 1px;">VIDEO PREVIEW</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            FRAME_WINDOW = None
+        else:
+            FRAME_WINDOW = st.empty()
+            
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">📊 Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
+        # JUDUL DAN GRAFIK JAM DIKUNCI MATI DI BAWAH PREVIEW VIDEO
+        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Lalu Lintas Per Jam Hari Ini</div>', unsafe_allow_html=True)
         df_h, df_d = get_chart_data()
         if not df_h.empty:
             fig1 = go.Figure(go.Bar(x=df_h['jam'].astype(str)+':00', y=df_h['total'], marker_color='#D9568B'))
-            fig1.update_layout(height=260, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0))
+            fig1.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig1, use_container_width=True)
 
-    # KONTEN KOLOM KANAN (METRIK & LOG/CHAT)
-    with col_panel:
-        st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📈 Ringkasan Metrik</div>', unsafe_allow_html=True)
+        with st.expander("Log Aktivitas Terkini", expanded=False):
+            LOG_WINDOW = st.empty()
+
+    with col_right:
+        # --- RINGKASAN METRIK DI SEBELAH KANAN VIDEO (BERTUMPUK) ---
+        st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📊 Ringkasan Metrik</div>', unsafe_allow_html=True)
         
-        # Grid Metrik 2x2
-        m1, m2 = st.columns(2)
-        m3, m4 = st.columns(2)
-        ph_in = m1.empty()
-        ph_buy = m2.empty()
-        ph_rate = m3.empty()
-        ph_occ = m4.empty()
+        # PERBAIKAN: Menghapus "Pengunjung di Dalam", tersisa 3 kolom metrik seimbang
+        m1, m2, m3 = st.columns(3)
+        ph_in, ph_buy, ph_rate = m1.empty(), m2.empty(), m3.empty()
 
         def update_metrics_ui():
             c_in, c_buy, c_out = st.session_state.count_in, st.session_state.count_buyer, st.session_state.count_out
             rate = round((c_buy / c_in * 100), 1) if c_in > 0 else 0
-            occ = max(0, c_in - c_out) 
             ph_in.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL MASUK</div><div class="metric-value val-white">{c_in}</div></div>', unsafe_allow_html=True)
-            ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">PEMBELI</div><div class="metric-value val-pink">{c_buy}</div></div>', unsafe_allow_html=True)
+            ph_buy.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL PEMBELI</div><div class="metric-value val-pink">{c_buy}</div></div>', unsafe_allow_html=True)
             ph_rate.markdown(f'<div class="metric-card"><div class="metric-title">KONVERSI</div><div class="metric-value val-teal">{rate}%</div></div>', unsafe_allow_html=True)
-            ph_occ.markdown(f'<div class="metric-card"><div class="metric-title">DI DALAM AREA</div><div class="metric-value val-white">{occ}</div></div>', unsafe_allow_html=True)
 
         update_metrics_ui()
-
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Log Aktivitas disusun vertikal seperti "Live Chat"
-        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">📋 Riwayat Aktivitas Terkini</div>', unsafe_allow_html=True)
-        LOG_WINDOW = st.empty()
 
-    # TREN 7 HARI DITAMPILKAN PENUH DI BAWAH KEDUA KOLOM AGAR LEGA
-    st.markdown("---")
-    st.markdown('<div style="color:white; font-weight:600; font-size:18px; margin-bottom:10px;">📉 Tren Pengunjung vs Pembeli (7 Hari Terakhir)</div>', unsafe_allow_html=True)
-    if not df_d.empty:
-        fig2 = go.Figure(data=[
-            go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7'), 
-            go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B')
-        ])
-        fig2.update_layout(height=350, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', showlegend=True, margin=dict(l=0, r=0, t=30, b=0))
-        st.plotly_chart(fig2, use_container_width=True)
+        # GRAFIK 7 HARI IKUT BERTUMPUK DI SEBELAH KANAN VIDEO
+        st.markdown('<div style="color:white; font-weight:600; margin-bottom:10px;">Pengunjung vs Pembeli (7 Hari)</div>', unsafe_allow_html=True)
+        if not df_d.empty:
+            fig2 = go.Figure(data=[
+                go.Bar(name='Pengunjung', x=df_d['tanggal'], y=df_d['Pengunjung'], marker_color='#00C9A7'), 
+                go.Bar(name='Pembeli', x=df_d['tanggal'], y=df_d['Pembeli'], marker_color='#D9568B')
+            ])
+            fig2.update_layout(height=415, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#A0AEC0', showlegend=False, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig2, use_container_width=True)
 
-    # --- EKSEKUSI KAMERA (DARI VISION.PY) ---
-    if run_camera and video_path is not None:
+    # --- JALANKAN LOGIKA KAMERA VIA VISION.PY ---
+    if run_camera and video_path is not None and FRAME_WINDOW is not None:
         run_camera_loop(video_path, new_cfg, FRAME_WINDOW, LOG_WINDOW, update_metrics_ui)
     else:
         LOG_WINDOW.markdown(render_log_table(), unsafe_allow_html=True)

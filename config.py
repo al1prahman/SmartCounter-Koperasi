@@ -6,9 +6,14 @@ CONFIG_FILE = "ui_config.json"
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
+            cfg = json.load(f)
+            cfg.setdefault("PINTU_Y_START", 150)
+            cfg.setdefault("PINTU_Y_END", 450)
+            return cfg
+            
     return {
         "LINE_ORIENT": "Vertikal", "LINE_POS": 320, "ENTRY_DIR": "Kiri ke Kanan",
+        "PINTU_Y_START": 150, "PINTU_Y_END": 450,
         "STAFF_LIMIT": 10, "BUYER_LIMIT": 10,
         "stf_x": 50, "stf_y": 50, "stf_w": 200, "stf_h": 300,
         "ksr_x": 380, "ksr_y": 50, "ksr_w": 200, "ksr_h": 300

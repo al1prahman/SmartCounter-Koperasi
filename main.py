@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import plotly.graph_objects as go
 import numpy as np
+import json # TAMBAHAN UNTUK FITUR PROFIL
 from io import BytesIO
 from openpyxl.styles import Border, Side, Font, Alignment
 
@@ -92,34 +93,32 @@ st.sidebar.markdown("---")
 
 # === PENGATURAN ZONA ===
 st.sidebar.subheader("Pengaturan Garis Pintu")
-idx_orient = 0 if cfg["LINE_ORIENT"] == "Vertikal" else 1
+idx_orient = 0 if cfg.get("LINE_ORIENT", "Vertikal") == "Vertikal" else 1
 LINE_ORIENT = st.sidebar.selectbox("Orientasi Garis Pintu", ["Vertikal", "Horizontal"], index=idx_orient)
 
 if LINE_ORIENT == "Vertikal":
-    LINE_POS = st.sidebar.slider("Posisi Koordinat (X)", 0, 640, cfg["LINE_POS"])
-    ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Kiri ke Kanan", "Kanan ke Kiri"], index=0 if cfg["ENTRY_DIR"] == "Kiri ke Kanan" else 1)
-    
+    LINE_POS = st.sidebar.slider("Posisi Koordinat (X)", 0, 640, cfg.get("LINE_POS", 320))
+    ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Kiri ke Kanan", "Kanan ke Kiri"], index=0 if cfg.get("ENTRY_DIR", "Kiri ke Kanan") == "Kiri ke Kanan" else 1)
     PINTU_Y_START = st.sidebar.slider("Batas Atas Garis (Y Start)", 0, 480, cfg.get("PINTU_Y_START", 150))
     PINTU_Y_END = st.sidebar.slider("Batas Bawah Garis (Y End)", 0, 480, cfg.get("PINTU_Y_END", 450))
 else:
-    LINE_POS = st.sidebar.slider("Posisi Koordinat (Y)", 0, 480, cfg["LINE_POS"])
-    ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Atas ke Bawah", "Bawah ke Atas"], index=0 if cfg["ENTRY_DIR"] == "Atas ke Bawah" else 1)
-    
+    LINE_POS = st.sidebar.slider("Posisi Koordinat (Y)", 0, 480, cfg.get("LINE_POS", 240))
+    ENTRY_DIR = st.sidebar.radio("Definisi Arah 'Masuk':", ["Atas ke Bawah", "Bawah ke Atas"], index=0 if cfg.get("ENTRY_DIR", "Atas ke Bawah") == "Atas ke Bawah" else 1)
     PINTU_Y_START = st.sidebar.slider("Batas Kiri Garis (X Start)", 0, 640, cfg.get("PINTU_Y_START", 150))
     PINTU_Y_END = st.sidebar.slider("Batas Kanan Garis (X End)", 0, 640, cfg.get("PINTU_Y_END", 450))
 
 with st.sidebar.expander("Konfigurasi Kotak & Waktu Tunggu", expanded=False):
-    STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, cfg["STAFF_LIMIT"]) 
-    BUYER_LIMIT = st.slider("Waktu Tunggu Pembeli", 1, 60, cfg["BUYER_LIMIT"]) 
+    STAFF_LIMIT = st.slider("Waktu Tunggu Staf", 1, 60, cfg.get("STAFF_LIMIT", 10)) 
+    BUYER_LIMIT = st.slider("Waktu Tunggu Pembeli", 1, 60, cfg.get("BUYER_LIMIT", 10)) 
     st.markdown("---")
-    stf_x = st.slider("Staf: Posisi X", 0, 640, cfg["stf_x"])
-    stf_y = st.slider("Staf: Posisi Y", 0, 480, cfg["stf_y"])
-    stf_w = st.slider("Staf: Lebar", 50, 640, cfg["stf_w"])
-    stf_h = st.slider("Staf: Tinggi", 50, 480, cfg["stf_h"])
-    ksr_x = st.slider("Kasir: Posisi X", 0, 640, cfg["ksr_x"])
-    ksr_y = st.slider("Kasir: Posisi Y", 0, 480, cfg["ksr_y"])
-    ksr_w = st.slider("Kasir: Lebar", 50, 640, cfg["ksr_w"])
-    ksr_h = st.slider("Kasir: Tinggi", 50, 480, cfg["ksr_h"])
+    stf_x = st.slider("Staf: Posisi X", 0, 640, cfg.get("stf_x", 50))
+    stf_y = st.slider("Staf: Posisi Y", 0, 480, cfg.get("stf_y", 50))
+    stf_w = st.slider("Staf: Lebar", 50, 640, cfg.get("stf_w", 200))
+    stf_h = st.slider("Staf: Tinggi", 50, 480, cfg.get("stf_h", 300))
+    ksr_x = st.slider("Kasir: Posisi X", 0, 640, cfg.get("ksr_x", 380))
+    ksr_y = st.slider("Kasir: Posisi Y", 0, 480, cfg.get("ksr_y", 50))
+    ksr_w = st.slider("Kasir: Lebar", 50, 640, cfg.get("ksr_w", 200))
+    ksr_h = st.slider("Kasir: Tinggi", 50, 480, cfg.get("ksr_h", 300))
 
 new_cfg = {
     "LINE_ORIENT": LINE_ORIENT, "LINE_POS": LINE_POS, "ENTRY_DIR": ENTRY_DIR,
@@ -129,6 +128,44 @@ new_cfg = {
     "ksr_x": ksr_x, "ksr_y": ksr_y, "ksr_w": ksr_w, "ksr_h": ksr_h
 }
 save_config(new_cfg)
+
+# === FITUR BARU: MANAJEMEN PROFIL RUANGAN ===
+st.sidebar.markdown("---")
+with st.sidebar.expander("📁 Manajemen Profil Ruangan", expanded=False):
+    st.markdown("<span style='color:#A0AEC0; font-size:12px;'>Simpan atau muat letak zona (Garis/Kasir/Staf) untuk ruangan berbeda.</span>", unsafe_allow_html=True)
+    
+    # Bagian 1: Download Profil (Simpan)
+    st.markdown("**Simpan Profil Saat Ini**")
+    nama_ruangan = st.text_input("Nama Ruangan:", placeholder="Misal: Kelas_B")
+    json_str = json.dumps(new_cfg, indent=4)
+    file_name = f"Config_{nama_ruangan}.json" if nama_ruangan else "Config_Default.json"
+    
+    st.download_button(
+        label="📥 Unduh File Konfigurasi",
+        data=json_str,
+        file_name=file_name,
+        mime="application/json",
+        use_container_width=True
+    )
+    
+    st.markdown("---")
+    
+    # Bagian 2: Upload Profil (Muat)
+    st.markdown("**Muat Profil Baru**")
+    uploaded_config = st.file_uploader("Unggah File .json", type=['json'])
+    if uploaded_config is not None:
+        if st.button("🚀 Terapkan Konfigurasi", use_container_width=True):
+            try:
+                # Baca file yang diunggah
+                loaded_cfg = json.load(uploaded_config)
+                # Simpan menimpa ui_config.json lokal
+                save_config(loaded_cfg)
+                st.success("Profil berhasil dimuat!")
+                # Paksa Streamlit refresh agar slider berubah otomatis
+                st.rerun() 
+            except Exception as e:
+                st.error("File JSON tidak valid!")
+
 
 # ==========================================
 # RENDER UTAMA (PREVIEW / DASHBOARD)
@@ -167,7 +204,6 @@ else:
     with col_left:
         st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📹 Tayangan Langsung</div>', unsafe_allow_html=True)
         
-        # PERBAIKAN: Tinggi video preview diperpanjang dari 410px ke 450px agar seimbang dengan tumpukan kartu
         if not run_camera:
             st.markdown(
                 """
@@ -207,8 +243,6 @@ else:
     with col_right:
         st.markdown('<div style="color:white; font-weight:600; font-size:16px; margin-bottom:10px;">📊 Ringkasan Metrik</div>', unsafe_allow_html=True)
         
-        # PERBAIKAN UTAMA: Menghapus sub-columns (m1,m2,m3). 
-        # Card sekarang diposisikan langsung bertumpuk secara vertikal (Full-Width & Konsisten)
         ph_in = st.empty()
         ph_buy = st.empty()
         ph_rate = st.empty()

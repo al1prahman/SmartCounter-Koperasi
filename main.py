@@ -31,7 +31,8 @@ if 'initialized' not in st.session_state or st.session_state.get('current_date')
     })
 
 # --- SIDEBAR CONTROLS ---
-st.sidebar.markdown('<div style="color:white; font-size:18px; font-weight:600; margin-bottom:20px;">Panel Admin<br><span style="color:#A0AEC0; font-size:12px; font-weight:400;">Tampilan Operasional</span></div>', unsafe_allow_html=True)
+# PERBAIKAN: Tulisan dibuat lebih besar (22px), posisi naik ke atas (margin-top: -20px), dan sub-teks "Tampilan Operasional" dihapus total.
+st.sidebar.markdown('<div style="color:white; font-size:22px; font-weight:600; margin-top:-20px; margin-bottom:20px;">Panel Admin</div>', unsafe_allow_html=True)
 video_source = st.sidebar.radio("Sumber Deteksi:", ["Kamera Live", "Unggah Video (MP4)"])
 
 video_path = None
@@ -129,12 +130,11 @@ new_cfg = {
 }
 save_config(new_cfg)
 
-# === FITUR BARU: MANAJEMEN PROFIL RUANGAN ===
+# === MANAJEMEN PROFIL RUANGAN ===
 st.sidebar.markdown("---")
 with st.sidebar.expander("📁 Manajemen Profil Ruangan", expanded=False):
     st.markdown("<span style='color:#A0AEC0; font-size:12px;'>Simpan atau muat letak zona (Garis/Kasir/Staf) untuk ruangan berbeda.</span>", unsafe_allow_html=True)
     
-    # Bagian 1: Download Profil (Simpan)
     st.markdown("**Simpan Profil Saat Ini**")
     nama_ruangan = st.text_input("Nama Ruangan:", placeholder="Misal: Kelas_B")
     json_str = json.dumps(new_cfg, indent=4)
@@ -150,18 +150,14 @@ with st.sidebar.expander("📁 Manajemen Profil Ruangan", expanded=False):
     
     st.markdown("---")
     
-    # Bagian 2: Upload Profil (Muat)
     st.markdown("**Muat Profil Baru**")
     uploaded_config = st.file_uploader("Unggah File .json", type=['json'])
     if uploaded_config is not None:
         if st.button("🚀 Terapkan Konfigurasi", use_container_width=True):
             try:
-                # Baca file yang diunggah
                 loaded_cfg = json.load(uploaded_config)
-                # Simpan menimpa ui_config.json lokal
                 save_config(loaded_cfg)
                 st.success("Profil berhasil dimuat!")
-                # Paksa Streamlit refresh agar slider berubah otomatis
                 st.rerun() 
             except Exception as e:
                 st.error("File JSON tidak valid!")
